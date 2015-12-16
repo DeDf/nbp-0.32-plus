@@ -94,7 +94,7 @@ NTSTATUS NTAPI HvmSwallowBluepill ();
 
 NTSTATUS NTAPI HvmSpitOutBluepill ();
 
-NTSTATUS NTAPI HvmInit ();
+NTSTATUS HvmInit ();
 
 VOID NTAPI HvmVmExitCallback (
   PCPU Cpu,

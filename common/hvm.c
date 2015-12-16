@@ -21,6 +21,8 @@ NTSTATUS NTAPI HvmResumeGuest (
   _KdPrint (("HvmResumeGuest(): Processor #%d, irql %d in GUEST\n",
              KeGetCurrentProcessorNumber (), KeGetCurrentIrql ()));
 
+  // irql will be lowered in the CmDeliverToProcessor()
+  //CmSti();
   return STATUS_SUCCESS;
 }
 
@@ -449,30 +451,21 @@ NTSTATUS NTAPI HvmSwallowBluepill ()
   return STATUS_SUCCESS;
 }
 
-NTSTATUS
-NTAPI HvmInit (
-)
+NTSTATUS HvmInit ()
 {
-  BOOLEAN ArchIsOK = FALSE;
-
-  Hvm = &Vmx;
-  if (Hvm->ArchIsHvmImplemented ())
-  {
-    ArchIsOK = TRUE;
-  }
-
-  //
-  // Hvm未实现
-  //
-  if (ArchIsOK == FALSE)
-  {
-    _KdPrint (("HvmInit(): VMX is not supported\n"));
-    return STATUS_NOT_SUPPORTED;
-  }
-  else
-  {
-    _KdPrint (("HvmInit(): Running on VMX\n"));
-  }
-
-  return STATUS_SUCCESS;
+    Hvm = &Vmx;
+    if (Vmx.ArchIsHvmImplemented ())
+    {
+        KdPrint (("HvmInit(): Running on VMX~\n"));
+        //
+        // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
+        //
+        KeInitializeMutex (&g_HvmMutex, 0);
+        return STATUS_SUCCESS;
+    }
+    else
+    {
+        KdPrint (("HvmInit(): VMX is not supported!\n"));
+        return STATUS_NOT_SUPPORTED;
+    }
 }
