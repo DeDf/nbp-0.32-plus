@@ -216,23 +216,16 @@ static NTSTATUS VmxSetupVMCS (
 )
 {
   SEGMENT_SELECTOR SegmentSelector;
-  PHYSICAL_ADDRESS VmcsToContinuePA;
+  PHYSICAL_ADDRESS VmcsToContinuePA = Cpu->Vmx.VmcsToContinuePA;
   NTSTATUS Status;
   PVOID GdtBase;
   ULONG32 Interceptions;
 
-  if (!Cpu || !Cpu->Vmx.OriginalVmcs)
+  if (!Cpu->Vmx.OriginalVmcs)
     return STATUS_INVALID_PARAMETER;
 
-  //
-  // VM结构地址
-  //
-  VmcsToContinuePA = Cpu->Vmx.VmcsToContinuePA;
-
-  VmxClear (VmcsToContinuePA);
-  VmxPtrld (VmcsToContinuePA);
-
-  /*16BIT Fields */
+  __vmx_vmclear (&VmcsToContinuePA);
+  __vmx_vmptrld (&VmcsToContinuePA);
 
   /*16BIT Host-Statel Fields. */
 #ifdef _X86_
@@ -553,8 +546,8 @@ NTSTATUS NTAPI VmxInitialize (
   }
 
   set_in_cr4 (X86_CR4_VMXE);
-  *((ULONG64 *) Cpu->Vmx.OriginaVmxonR)  = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id
-  *((ULONG64 *) (Cpu->Vmx.OriginalVmcs)) = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); 
+  *(ULONG64 *) Cpu->Vmx.OriginaVmxonR = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id
+  *(ULONG64 *) Cpu->Vmx.OriginalVmcs  = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); 
   t = MmGetPhysicalAddress (Cpu->Vmx.OriginaVmxonR);
   if (__vmx_on (&t))
   {
