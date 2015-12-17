@@ -93,7 +93,7 @@ NTSTATUS NTAPI HvmSwallowBluepill ();
 
 NTSTATUS NTAPI HvmSpitOutBluepill ();
 
-VOID NTAPI HvmVmExitCallback (
+VOID NTAPI VmExitHandler (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 );

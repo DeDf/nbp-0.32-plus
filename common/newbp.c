@@ -22,7 +22,7 @@ DriverUnload (
 //   DbgUnregisterWindow ();
 // #endif
 
-  KdPrint (("NEWBLUEPILL: Unloading finished\n"));
+  KdPrint (("[NEWBLUEPILL] Unloading finished~\n"));
   return STATUS_SUCCESS;
 }
 
@@ -51,13 +51,12 @@ DriverEntry (
 //   }
 // #endif
 
-  KdPrint (("\nNEWBLUEPILL DriverEntry~\n"));
+  KdPrint (("\n[NEWBLUEPILL] DriverEntry~\n"));
 
   if (VmxIsImplemented ())
   {
       Hvm = &Vmx;
       KeInitializeMutex (&g_HvmMutex, 0);  // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
-      KdPrint (("DriverEntry(): Running on VMX~\n"));
   }
   else
   {
@@ -80,7 +79,7 @@ DriverEntry (
 
   DriverObject->DriverUnload = DriverUnload;
 
-  KdPrint (("NEWBLUEPILL: Initialization finished\n"));
+  KdPrint (("NEWBLUEPILL: Initialization finished~\n"));
 
   return STATUS_SUCCESS;
 }

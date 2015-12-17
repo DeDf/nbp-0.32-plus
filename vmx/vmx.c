@@ -20,7 +20,7 @@ HVM_DEPENDENT Vmx = {
   VmxIsTrapVaild
 };
 
-ULONG64 g_HostStackBaseAddress; //4     // FIXME: this is ugly -- we should move it somewhere else
+ULONG64 g_HostStackBaseAddress;
 
 extern ULONG g_uSubvertedCPUs;
 
@@ -166,7 +166,7 @@ static ULONG32 NTAPI VmxAdjustControls (
 {
   LARGE_INTEGER MsrValue;
 
-  MsrValue.QuadPart = MsrRead (Msr);
+  MsrValue.QuadPart = __readmsr (Msr);
   Ctl &= MsrValue.HighPart;     /* bit == 0 in high word ==> must be zero */
   Ctl |= MsrValue.LowPart;      /* bit == 1 in low word  ==> must be one  */
   return Ctl;
@@ -218,15 +218,15 @@ static NTSTATUS VmxSetupVMCS (
 
   /*16BIT Host-Statel Fields. */
 #ifdef _X86_
-  __vmx_vmwrite (HOST_ES_SELECTOR, RegGetEs () & 0xf8);
   __vmx_vmwrite (HOST_CS_SELECTOR, RegGetCs () & 0xf8);
-  __vmx_vmwrite (HOST_SS_SELECTOR, RegGetSs () & 0xf8);
   __vmx_vmwrite (HOST_DS_SELECTOR, RegGetDs () & 0xf8);
+  __vmx_vmwrite (HOST_ES_SELECTOR, RegGetEs () & 0xf8);
+  __vmx_vmwrite (HOST_SS_SELECTOR, RegGetSs () & 0xf8);
 #else
-  __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
   __vmx_vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
-  __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
   __vmx_vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
 #endif
   __vmx_vmwrite (HOST_FS_SELECTOR, (RegGetFs () & 0xf8));
   __vmx_vmwrite (HOST_GS_SELECTOR, (RegGetGs () & 0xf8));
@@ -260,8 +260,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (VMCS_LINK_POINTER, 0xffffffff);
   __vmx_vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
 
-  __vmx_vmwrite (GUEST_IA32_DEBUGCTL, MsrRead (MSR_IA32_DEBUGCTL) & 0xffffffff);
-  __vmx_vmwrite (GUEST_IA32_DEBUGCTL_HIGH, MsrRead (MSR_IA32_DEBUGCTL) >> 32);
+  __vmx_vmwrite (GUEST_IA32_DEBUGCTL, __readmsr (MSR_IA32_DEBUGCTL) & 0xffffffff);
+  __vmx_vmwrite (GUEST_IA32_DEBUGCTL_HIGH, __readmsr (MSR_IA32_DEBUGCTL) >> 32);
 
   /*32BIT Control Fields. */
   __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));      //disable Vmexit by Extern-interrupt,NMI and Virtual NMI 
@@ -315,11 +315,11 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
   __vmx_vmwrite (GUEST_ACTIVITY_STATE, 0);   //Active state          
   //GUEST_SM_BASE          = 0x98000,   //no init
-  __vmx_vmwrite (GUEST_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));
+  __vmx_vmwrite (GUEST_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));
 
   /*32BIT Host-Statel Fields. */
 
-  __vmx_vmwrite (HOST_IA32_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));     //no use
+  __vmx_vmwrite (HOST_IA32_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));     //no use
 
   /* NATURAL Control State Fields:need not setup. */
   __vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
@@ -379,8 +379,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_CS_BASE, 0);
   __vmx_vmwrite (GUEST_SS_BASE, 0);
   __vmx_vmwrite (GUEST_DS_BASE, 0);
-  __vmx_vmwrite (GUEST_FS_BASE, MsrRead (MSR_FS_BASE));
-  __vmx_vmwrite (GUEST_GS_BASE, MsrRead (MSR_GS_BASE));
+  __vmx_vmwrite (GUEST_FS_BASE, __readmsr (MSR_FS_BASE));
+  __vmx_vmwrite (GUEST_GS_BASE, __readmsr (MSR_GS_BASE));
 #endif
 
   // LDTR/TR bases have been set in VmxFillGuestSelectorData()
@@ -392,16 +392,16 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
   __vmx_vmwrite (GUEST_RFLAGS, RegGetRflags ());
   //VmxWrite(GUEST_PENDING_DBG_EXCEPTIONS, 0);//no init
-  __vmx_vmwrite (GUEST_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (GUEST_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
 
   /* HOST State Fields. */
   __vmx_vmwrite (HOST_CR0, RegGetCr0 ());
   __vmx_vmwrite (HOST_CR3, RegGetCr3 ());
   __vmx_vmwrite (HOST_CR4, RegGetCr4 ());
 
-  __vmx_vmwrite (HOST_FS_BASE, MsrRead (MSR_FS_BASE));
-  __vmx_vmwrite (HOST_GS_BASE, MsrRead (MSR_GS_BASE));
+  __vmx_vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
+  __vmx_vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
 
   // TODO: we must setup our own TSS
   // FIXME???
@@ -412,12 +412,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) Cpu->GdtArea);
   __vmx_vmwrite (HOST_IDTR_BASE, (ULONG64) Cpu->IdtArea);
 
-// FIXME???
-//      VmxWrite(HOST_GDTR_BASE, (ULONG64)GetGdtBase());
-//      VmxWrite(HOST_IDTR_BASE, (ULONG64)GetIdtBase());
-
-  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
 
 #ifdef _X86_
   __vmx_vmwrite (HOST_RSP, g_HostStackBaseAddress + 0x0C00); //setup host sp at vmxLaunch(...)
@@ -559,7 +555,7 @@ NTSTATUS NTAPI VmxInitialize (
   //
   // 读取MSR_EFE/CR0/CR3/CR4等寄存器的内容并记录到CPU结构
   //
-  Cpu->Vmx.GuestEFER = MsrRead (MSR_EFER);
+  Cpu->Vmx.GuestEFER = __readmsr (MSR_EFER);
   KdPrint (("Guest MSR_EFER Read 0x%llx \n", Cpu->Vmx.GuestEFER));
   Cpu->Vmx.GuestCR0 = RegGetCr0 ();
   Cpu->Vmx.GuestCR3 = RegGetCr3 ();
@@ -713,15 +709,9 @@ static NTSTATUS NTAPI VmxVirtualize (
   *((PULONG64) (g_HostStackBaseAddress + 0x0C00)) = (ULONG64) Cpu;
 #endif
 
+  __vmx_vmlaunch();
   //
-  // __asm BYTE 0Fh, 01h, 0C2h   ( __asm VMLAUNCH )
-  //
-  VmxLaunch ();
-
-  //
-  // never returns
   // VMLAUNCH后操作系统变为Guest，不会返回
-  //
 
   return STATUS_UNSUCCESSFUL;
 }

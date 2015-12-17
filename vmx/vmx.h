@@ -397,7 +397,6 @@ VOID NTAPI VmxTurnOn (
   PHYSICAL_ADDRESS VmxonPA
 );
 
-VOID NTAPI VmxLaunch ();
 VOID NTAPI VmxResume ();
 
 VOID NTAPI VmxVmexitHandler (

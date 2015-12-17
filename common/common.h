@@ -531,7 +531,7 @@ NTSTATUS NTAPI CmSubvert (
   PVOID
 );
 
-NTSTATUS NTAPI CmSlipIntoMatrix (
+NTSTATUS NTAPI CmResumeGuest (
   PVOID
 );
 

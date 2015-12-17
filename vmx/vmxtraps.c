@@ -136,7 +136,7 @@ static BOOLEAN NTAPI VmxDispatchMsrRead (
     //_KdPrint(("Guestip 0x%llx MSR_EFER Read 0x%llx 0x%llx \n",VmxRead(GUEST_RIP),ecx,MsrValue.QuadPart));
     break;
   default:
-    MsrValue.QuadPart = MsrRead (ecx);
+    MsrValue.QuadPart = __readmsr (ecx);
   }
 
   GuestRegs->rax = MsrValue.LowPart;

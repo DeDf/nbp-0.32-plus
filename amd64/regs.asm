@@ -1,21 +1,19 @@
 ; only some boring stuff here...
 
-
 .CODE
 
 RegGetTSC PROC
-;	rdtscp
 	rdtsc
 	shl		rdx, 32
 	or		rax, rdx
 	ret
 RegGetTSC ENDP
 
+
 RegGetRax PROC
 	mov		rax, rax
 	ret
 RegGetRax ENDP
-
 
 RegGetRbx PROC
 	mov		rax, rbx
@@ -53,6 +51,7 @@ RegGetGs PROC
 	ret
 RegGetGs ENDP
 
+
 RegGetCr0 PROC
 	mov		rax, cr0
 	ret
@@ -87,6 +86,7 @@ RegSetCr8 PROC
 	mov		cr8, rcx
 	ret
 RegSetCr8 ENDP
+
 
 RegGetDr6 PROC
 	mov		rax, dr6
@@ -132,6 +132,7 @@ RegSetDr3 PROC
 	mov		dr3, rcx
 	ret
 RegSetDr3 ENDP
+
 
 RegGetRflags PROC
 	pushfq
@@ -189,7 +190,6 @@ GetTrSelector PROC
 	str	rax
 	ret
 GetTrSelector ENDP
-
 
 
 END

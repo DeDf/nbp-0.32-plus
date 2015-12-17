@@ -26,7 +26,7 @@ NTSTATUS NTAPI HvmResumeGuest (
   return STATUS_SUCCESS;
 }
 
-VOID NTAPI HvmEventCallback (
+VOID NTAPI VmExitHandler (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 )
@@ -189,21 +189,21 @@ NTSTATUS NTAPI HvmSubvertCpu (
   // 为Guest重新分配Gdt
   Cpu->GdtArea = ExAllocatePoolWithTag (NonPagedPool, PAGE_SIZE, ITL_TAG);
   if (!Cpu->GdtArea) {
-    _KdPrint (("HvmSubvertCpu(): Failed to allocate memory for GDT!\n"));
+    KdPrint (("HvmSubvertCpu(): Failed to allocate memory for GDT!\n"));
     return STATUS_INSUFFICIENT_RESOURCES;
   }
 
   // 为Guest重新分配Idt
   Cpu->IdtArea = ExAllocatePoolWithTag (NonPagedPool, PAGE_SIZE, ITL_TAG);
   if (!Cpu->IdtArea) {
-    _KdPrint (("HvmSubvertCpu(): Failed to allocate memory for IDT\n"));
+    KdPrint (("HvmSubvertCpu(): Failed to allocate memory for IDT\n"));
     return STATUS_INSUFFICIENT_RESOURCES;
   }
 
   t.QuadPart = -1;
   Cpu->SparePage = MmAllocateContiguousMemory (PAGE_SIZE, t);
   if (!Cpu->SparePage) {
-    _KdPrint (("HvmSubvertCpu(): Failed to allocate 1 page for the dummy page (DPA_CONTIGUOUS)\n"));
+    KdPrint (("HvmSubvertCpu(): Failed to allocate 1 page for the dummy page (DPA_CONTIGUOUS)\n"));
     return STATUS_UNSUCCESSFUL;
   }
   Cpu->SparePagePA = MmGetPhysicalAddress (Cpu->SparePage);
@@ -216,7 +216,7 @@ NTSTATUS NTAPI HvmSubvertCpu (
   //
   Status = VmxRegisterTraps (Cpu);
   if (!NT_SUCCESS (Status)) {
-    _KdPrint (("HvmSubvertCpu(): Failed to register NewBluePill traps, status 0x%08hX\n", Status));
+    KdPrint (("HvmSubvertCpu(): Failed to register NewBluePill traps, status 0x%08hX\n", Status));
     return STATUS_UNSUCCESSFUL;
   }
 
@@ -226,7 +226,7 @@ NTSTATUS NTAPI HvmSubvertCpu (
   // GuestRip和GuestRsp会被填进VMCS结构，代表Guest原本的代码位置和栈顶指针
   // CmSlipIntoMatrix即HvmResumeGuest
   //
-  Status = VmxInitialize (Cpu, CmSlipIntoMatrix, GuestRsp);
+  Status = VmxInitialize (Cpu, CmResumeGuest, GuestRsp);
   if (!NT_SUCCESS (Status))
   {
     KdPrint (("HvmSubvertCpu(): ArchInitialize() failed with status 0x%08hX\n", Status));
@@ -255,18 +255,11 @@ NTSTATUS NTAPI HvmSubvertCpu (
   }
 #endif
 
-  // no API calls allowed below this point: we have overloaded GDTR and selectors
-#ifdef _X86_
-
-#else
   HvmSetupGdt (Cpu);   // 配置Guest Gdt
   HvmSetupIdt (Cpu);   // 配置Guest Idt
-#endif
 
-  //
   // 一切准备工作完毕，使该CPU进入虚拟机
-  //
-  Status = Hvm->ArchVirtualize (Cpu);
+  __vmx_vmlaunch();
 
   // never reached
   InterlockedDecrement (&g_uSubvertedCPUs);
@@ -294,7 +287,7 @@ static NTSTATUS NTAPI HvmLiberateCpu (
   if (KeGetCurrentIrql () != DISPATCH_LEVEL)
     return STATUS_UNSUCCESSFUL;
 
-  Efer = MsrRead (MSR_EFER);
+  Efer = __readmsr (MSR_EFER);
 
   _KdPrint (("HvmLiberateCpu(): Reading MSR_EFER on entry: 0x%X\n", Efer));
 
@@ -305,7 +298,7 @@ static NTSTATUS NTAPI HvmLiberateCpu (
     return Status;
   }
 
-  Efer = MsrRead (MSR_EFER);
+  Efer = __readmsr (MSR_EFER);
   _KdPrint (("HvmLiberateCpu(): Reading MSR_EFER on exit: 0x%X\n", Efer));
 
   return STATUS_SUCCESS;

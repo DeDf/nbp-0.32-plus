@@ -156,7 +156,7 @@ CmSubvert PROC
 
 CmSubvert ENDP
 
-CmSlipIntoMatrix PROC
+CmResumeGuest PROC
 
 	call	HvmResumeGuest
 
@@ -180,7 +180,7 @@ CmSlipIntoMatrix PROC
 
 	ret
 
-CmSlipIntoMatrix ENDP
+CmResumeGuest ENDP
 
 ;====== CmIOIn(Port) ======
 

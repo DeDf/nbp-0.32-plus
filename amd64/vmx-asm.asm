@@ -2,13 +2,7 @@
 ; Copyright holder: Invisible Things Lab
 ;
 
-extern	g_HostStackBaseAddress:QWORD
-
-;extern	HvmEventCallback:PROC
-;extern	McCloak:PROC
-
-
-EXTERN	 HvmEventCallback:PROC  
+EXTERN	VmExitHandler:PROC  
 
 
 vmx_call MACRO
@@ -201,13 +195,6 @@ clear_in_cr4 ENDP
 ; |         struct CPU           |
 ; --------------------------------
 
-; vmxLaunch(PVOID HostStackBottom (rcx))
-
-VmxLaunch PROC	
-	vmx_launch
-	ret
-VmxLaunch ENDP
-
 VmxResume PROC 	
 	vmx_resume
 	ret
@@ -227,7 +214,7 @@ VmxVmexitHandler PROC
 
 	;rdtsc
 	
-	call	HvmEventCallback
+	call	VmExitHandler
 	add	rsp, 28h
 	
 	HVM_RESTORE_ALL_NOSEGREGS	
