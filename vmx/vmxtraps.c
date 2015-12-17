@@ -31,7 +31,7 @@ static BOOLEAN NTAPI VmxDispatchVmxInstrDummy (
 
   exit_qualification = (ULONG32) VmxRead (EXIT_QUALIFICATION);
 
-  VmxWrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & (~0x8d5) | 0x1 /* VMFailInvalid */ );
+  __vmx_vmwrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & (~0x8d5) | 0x1 /* VMFailInvalid */ );
   return TRUE;
 }
 
@@ -72,19 +72,14 @@ static BOOLEAN NTAPI VmxDispatchCpuid (
     return TRUE;
   fn = (ULONG32) GuestRegs->rax;
 
-#if DEBUG_LEVEL>1
-  _KdPrint (("VmxDispatchCpuid(): Fn 0x%x\n", fn));
-#endif
-
   inst_len = VmxRead (VM_EXIT_INSTRUCTION_LEN);
   if (Trap->General.RipDelta == 0)
     Trap->General.RipDelta = inst_len;
 
 #ifdef BP_KNOCK
-  if (fn == BP_KNOCK_EAX) {
-# if DEBUG_LEVEL>3
-    _KdPrint (("Magic knock received: %p\n", BP_KNOCK_EAX));
-# endif
+  if (fn == BP_KNOCK_EAX)
+  {
+    KdPrint (("Magic knock received: %x\n", BP_KNOCK_EAX));
     GuestRegs->rax = BP_KNOCK_EAX_ANSWER;
     return TRUE;
   }
@@ -96,10 +91,6 @@ static BOOLEAN NTAPI VmxDispatchCpuid (
   GuestRegs->rbx = ebx;
   GuestRegs->rcx = ecx;
   GuestRegs->rdx = edx;
-
-#if DEBUG_LEVEL>2
-  _KdPrint (("EXIT_REASON_CPUID fn 0x%x 0x%x 0x%x 0x%x 0x%x \n", fn, eax, ebx, ecx, edx));
-#endif
   return TRUE;
 }
 
@@ -179,19 +170,19 @@ static BOOLEAN NTAPI VmxDispatchMsrWrite (
 
   switch (ecx) {
   case MSR_IA32_SYSENTER_CS:
-    VmxWrite (GUEST_SYSENTER_CS, MsrValue.QuadPart);
+    __vmx_vmwrite (GUEST_SYSENTER_CS, MsrValue.QuadPart);
     break;
   case MSR_IA32_SYSENTER_ESP:
-    VmxWrite (GUEST_SYSENTER_ESP, MsrValue.QuadPart);
+    __vmx_vmwrite (GUEST_SYSENTER_ESP, MsrValue.QuadPart);
     break;
   case MSR_IA32_SYSENTER_EIP:
-    VmxWrite (GUEST_SYSENTER_EIP, MsrValue.QuadPart);
+    __vmx_vmwrite (GUEST_SYSENTER_EIP, MsrValue.QuadPart);
     break;
   case MSR_GS_BASE:
-    VmxWrite (GUEST_GS_BASE, MsrValue.QuadPart);
+    __vmx_vmwrite (GUEST_GS_BASE, MsrValue.QuadPart);
     break;
   case MSR_FS_BASE:
-    VmxWrite (GUEST_FS_BASE, MsrValue.QuadPart);
+    __vmx_vmwrite (GUEST_FS_BASE, MsrValue.QuadPart);
     break;
   case MSR_EFER:
     //_KdPrint(("Guestip 0x%llx MSR_EFER write 0x%llx 0x%llx\n",VmxRead(GUEST_RIP),ecx,MsrValue.QuadPart)); 
@@ -210,9 +201,9 @@ static VOID VmxUpdateGuestEfer (
 )
 {
   if (Cpu->Vmx.GuestEFER & EFER_LMA)
-    VmxWrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) | (VM_ENTRY_IA32E_MODE));
+    __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) | (VM_ENTRY_IA32E_MODE));
   else
-    VmxWrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) & (~VM_ENTRY_IA32E_MODE));
+    __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) & (~VM_ENTRY_IA32E_MODE));
 }
 
 //TODO: this function needs to be cleaned up -- too much stuff is commented out
@@ -254,7 +245,7 @@ static BOOLEAN NTAPI VmxDispatchCrAccess (
       if ((*(((PULONG64) GuestRegs) + gp)) & X86_CR0_PG)        //enable paging
       {
         //_KdPrint(("VmxDispatchCrAccess():paging\n"));
-        VmxWrite (GUEST_CR3, Cpu->Vmx.GuestCR3);
+        __vmx_vmwrite (GUEST_CR3, Cpu->Vmx.GuestCR3);
         if (Cpu->Vmx.GuestEFER & EFER_LME)
           Cpu->Vmx.GuestEFER |= EFER_LMA;
         else
@@ -275,9 +266,9 @@ static BOOLEAN NTAPI VmxDispatchCrAccess (
         */
       }
 #ifdef _X86_
-      VmxWrite (CR0_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & X86_CR0_PG);
+      __vmx_vmwrite (CR0_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & X86_CR0_PG);
 #else
-      VmxWrite (CR0_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & X86_CR0_PG);
+      __vmx_vmwrite (CR0_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & X86_CR0_PG);
 #endif
       VmxUpdateGuestEfer (Cpu);
       return FALSE;
@@ -292,9 +283,9 @@ static BOOLEAN NTAPI VmxDispatchCrAccess (
         _KdPrint (("VmxDispatchCrAccess(): TYPE_MOV_TO_CR cr3:0x%x\n", *(((PULONG64) GuestRegs) + gp)));
 #endif
 #ifdef _X86_
-        VmxWrite (GUEST_CR3, *(((PULONG32) GuestRegs) + gp));
+        __vmx_vmwrite (GUEST_CR3, *(((PULONG32) GuestRegs) + gp));
 #else
-        VmxWrite (GUEST_CR3, *(((PULONG64) GuestRegs) + gp));
+        __vmx_vmwrite (GUEST_CR3, *(((PULONG64) GuestRegs) + gp));
 #endif
       }
       return TRUE;
@@ -305,16 +296,16 @@ static BOOLEAN NTAPI VmxDispatchCrAccess (
       //_KdPrint(("VmxDispatchCrAccess(): TYPE_MOV_TO_CR Cpu->Vmx.GuestEFER:0x%x Cpu->Vmx.GuestCR0:0x%x cr4:0x%x\n",Cpu->Vmx.GuestEFER,Cpu->Vmx.GuestCR0,*(((PULONG64)GuestRegs)+gp)));
       //Nbp need enabele VMXE. so guest try to clear cr4_vmxe, it would be mask.
 #ifdef _X86_
-      VmxWrite (CR4_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & (X86_CR4_VMXE | X86_CR4_PAE));
+      __vmx_vmwrite (CR4_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & (X86_CR4_VMXE | X86_CR4_PAE));
       Cpu->Vmx.GuestCR4 = *(((PULONG32) GuestRegs) + gp);
-      VmxWrite (GUEST_CR4, (*(((PULONG32) GuestRegs) + gp)) | X86_CR4_VMXE);
+      __vmx_vmwrite (GUEST_CR4, (*(((PULONG32) GuestRegs) + gp)) | X86_CR4_VMXE);
 
 #else
       //VmxWrite(CR4_READ_SHADOW, (*(((PULONG64)GuestRegs)+gp)) & (X86_CR4_VMXE|X86_CR4_PAE|X86_CR4_PSE));
-      VmxWrite (CR4_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & (X86_CR4_VMXE));
+      __vmx_vmwrite (CR4_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & (X86_CR4_VMXE));
 
       Cpu->Vmx.GuestCR4 = *(((PULONG64) GuestRegs) + gp);
-      VmxWrite (GUEST_CR4, (*(((PULONG64) GuestRegs) + gp)) | X86_CR4_VMXE);
+      __vmx_vmwrite (GUEST_CR4, (*(((PULONG64) GuestRegs) + gp)) | X86_CR4_VMXE);
 #endif
 
       return FALSE;
@@ -467,7 +458,7 @@ static BOOLEAN NTAPI VmxDispatchRdtsc (
 
   GuestRegs->rdx = (size_t) (Cpu->Tsc >> 32);
   GuestRegs->rax = (size_t) (Cpu->Tsc & 0xffffffff);
-  VmxWrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) | 0x100);      // set TF
+  __vmx_vmwrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) | 0x100);      // set TF
 
   return TRUE;
 }
@@ -496,7 +487,7 @@ static BOOLEAN NTAPI VmxDispatchException (
              VmxRead (GUEST_INTERRUPTIBILITY_INFO), VmxRead (GUEST_PENDING_DBG_EXCEPTIONS)));
 //# endif
 
-  VmxWrite (GUEST_INTERRUPTIBILITY_INFO, 0);
+  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
   // FIXME: why is this commented?
 //      if (RegGetDr6() & 0x40) {
 
@@ -506,7 +497,7 @@ static BOOLEAN NTAPI VmxDispatchException (
 
   Cpu->EmulatedCycles += 6;     // TODO: replace with f(Opcode)
   if (Cpu->Tracing-- <= 0)
-    VmxWrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & ~0x100);   // disable TF
+    __vmx_vmwrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & ~0x100);   // disable TF
 
   Cpu->NoOfRecordedInstructions++;
   //TODO: add instruction opcode to Cpu->RecordedInstructions[]

@@ -128,9 +128,7 @@ CmInvalidatePage PROC
 CmInvalidatePage ENDP
 
 
-
 CmSubvert PROC
-
 
 	push	rax
 	push	rcx
@@ -152,8 +150,8 @@ CmSubvert PROC
 
 	mov	rcx, rsp
 	
-	;x64ç»Ÿä¸€ä¸º__fastcall: å‰å››ä¸ªæ•´å‹æˆ–æŒ‡é’ˆç±»å‹å‚æ•°ç”±RCX,RDX,R8,R9ä¾æ¬¡ä¼ é€’
-	;VmxSubvertCpuè¦æ±‚ä¸€ä¸ªå‚æ•°GuestRspï¼Œå³ç”¨rcxä¼ é€’
+	;x64Í³Ò»Îª__fastcall: Ç°ËÄ¸öÕûĞÍ»òÖ¸ÕëÀàĞÍ²ÎÊıÓÉRCX,RDX,R8,R9ÒÀ´Î´«µİ
+	;VmxSubvertCpuÒªÇóÒ»¸ö²ÎÊıGuestRsp£¬¼´ÓÃrcx´«µİ
 	call	HvmSubvertCpu
 
 CmSubvert ENDP
@@ -184,7 +182,8 @@ CmSlipIntoMatrix PROC
 
 CmSlipIntoMatrix ENDP
 
-;CmIOIn(Port)
+;====== CmIOIn(Port) ======
+
 CmIOIn PROC 
 	mov edx,ecx
 	in  eax,dx
@@ -192,7 +191,8 @@ CmIOIn PROC
 
 CmIOIn ENDP
 
-;CmIOOUT(Port,Data)
+;=== CmIOOUT(Port,Data) ===
+
 CmIOOutB PROC 
 	mov  eax,edx
 	mov  edx,ecx
@@ -214,11 +214,12 @@ CmIOOutD PROC
 	ret
 CmIOOutD ENDP
 
+;====== SpinLock ======
+
 CmInitSpinLock PROC
 	and	dword ptr [rcx], 0
 	ret
 CmInitSpinLock ENDP
-
 
 CmAcquireSpinLock PROC
 loop_down:
@@ -226,7 +227,6 @@ loop_down:
 	jb	loop_down
 	ret
 CmAcquireSpinLock ENDP
-
 
 CmReleaseSpinLock PROC
 	lock	btr dword ptr [rcx], 0

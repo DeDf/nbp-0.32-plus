@@ -53,28 +53,25 @@ DriverEntry (
 
   KdPrint (("\nNEWBLUEPILL DriverEntry~\n"));
 
-  //
-  // 初始化Hvm, 失败则撤销更改
-  //
-  status = HvmInit ();
-  if (status)
+  if (VmxIsImplemented ())
   {
-    _KdPrint (("NEWBLUEPILL: HvmInit() failed with status 0x%08hX\n", status));
-// #ifdef USE_LOCAL_DBGPRINTS
-//     DbgUnregisterWindow ();
-// #endif
-    return status;
+      Hvm = &Vmx;
+      KeInitializeMutex (&g_HvmMutex, 0);  // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
+      KdPrint (("DriverEntry(): Running on VMX~\n"));
+  }
+  else
+  {
+      KdPrint (("DriverEntry(): VMX is not supported!\n"));
+      return STATUS_NOT_SUPPORTED;
   }
 
-  KeInitializeMutex (&g_HvmMutex, 0);  // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
-
   //
-  // 鍚吞下BluePill，开启VMM模式, 失败则撤销更改
+  // 吞下BluePill，开启VMM模式, 失败则撤销更改
   //
   status = HvmSwallowBluepill ();
   if (status)
   {
-    _KdPrint (("NEWBLUEPILL: HvmSwallowBluepill() failed with status 0x%08hX\n", status));
+    KdPrint (("NEWBLUEPILL: HvmSwallowBluepill() failed with status 0x%08hX\n", status));
 // #ifdef USE_LOCAL_DBGPRINTS
 //     DbgUnregisterWindow ();
 // #endif

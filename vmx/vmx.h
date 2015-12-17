@@ -391,11 +391,6 @@ ULONG64 NTAPI VmxRead (
   ULONG64 field
 );
 
-VOID NTAPI VmxWrite (
-  ULONG64 field,
-  ULONG64 value
-);
-
 VOID NTAPI VmxTurnOff ();
 
 VOID NTAPI VmxTurnOn (
@@ -427,7 +422,7 @@ static BOOLEAN NTAPI VmxIsNestedEvent (
   PGUEST_REGS GuestRegs
 );
 
-static VOID NTAPI VmxDispatchEvent (
+VOID NTAPI VmxDispatchEvent (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 );
@@ -477,3 +472,9 @@ VOID DumpMemory (
   PUCHAR Addr,
   ULONG64 Len
 );
+
+VOID VmxHandleInterception (
+                            PCPU Cpu,
+                            PGUEST_REGS GuestRegs,
+                            BOOLEAN WillBeAlsoHandledByGuestHv
+                            );

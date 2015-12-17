@@ -1,15 +1,5 @@
 /* 
  * Copyright holder: Invisible Things Lab
- * 
- * This software is protected by domestic and International
- * copyright laws. Any use (including publishing and
- * distribution) of this software requires a valid license
- * from the copyright holder.
- *
- * This software is provided for the educational use only
- * during the Black Hat training. This software should not
- * be used on production systems.
- *
  */
 
 #pragma once
@@ -17,11 +7,11 @@
 #include <ntddk.h>
 #include "common.h"
 
-#define AP_PAGETABLE	1       // used to mark allocations of host pagetables
-#define AP_PT		2
-#define AP_PD		4
-#define AP_PDP		8
-#define AP_PML4		16
+#define AP_PAGETABLE  1       // used to mark allocations of host pagetables
+#define AP_PT		  2
+#define AP_PD		  4
+#define AP_PDP		  8
+#define AP_PML4		 16
 
 typedef enum
 {

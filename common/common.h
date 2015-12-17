@@ -39,7 +39,7 @@
 // BPKNOCK backdoor -------
 #define BP_KNOCK
 #ifdef BP_KNOCK
-# define BP_KNOCK_EAX	0xbabecafe
+# define BP_KNOCK_EAX	     0xbabecafe
 # define BP_KNOCK_EAX_ANSWER 0x69696969
 #endif // BP_KNOCK
 
@@ -412,8 +412,8 @@ typedef struct
   ARCH_ADJUST_RIP ArchAdjustRip;
   ARCH_REGISTER_TRAPS ArchRegisterTraps;
   ARCH_IS_TRAP_VALID ArchIsTrapValid;
-} HVM_DEPENDENT,
- *PHVM_DEPENDENT;
+
+} HVM_DEPENDENT, *PHVM_DEPENDENT;
 
 NTSTATUS NTAPI CmPatchPTEPhysicalAddress (
   PULONG64 pPte,

@@ -26,7 +26,8 @@ NTSTATUS NTAPI TrRegisterTrap (
   if (!Cpu || !Trap)
     return STATUS_INVALID_PARAMETER;
 
-  switch (Trap->TrapType) {
+  switch (Trap->TrapType)
+  {
   case TRAP_GENERAL:
     TrapList = &Cpu->GeneralTrapsList;
     break;
@@ -37,7 +38,7 @@ NTSTATUS NTAPI TrRegisterTrap (
     TrapList = &Cpu->IoTrapsList;
     break;
   default:
-    _KdPrint (("TrRegisterTrap(): Unknown TRAP_TYPE code: %d\n", (char) Trap->TrapType));
+    KdPrint (("TrRegisterTrap(): Unknown TRAP_TYPE code: %d\n", (char) Trap->TrapType));
     return STATUS_UNSUCCESSFUL;
   }
 

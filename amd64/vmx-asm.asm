@@ -1,15 +1,5 @@
 ; 
 ; Copyright holder: Invisible Things Lab
-; 
-; This software is protected by domestic and International
-; copyright laws. Any use (including publishing and
-; distribution) of this software requires a valid license
-; from the copyright holder.
-;
-; This software is provided for the educational use only
-; during the Black Hat training. This software should not
-; be used on production systems.
-;
 ;
 
 extern	g_HostStackBaseAddress:QWORD
@@ -41,10 +31,6 @@ vmx_read MACRO
 	BYTE	0Fh, 078h
 ENDM
 
-vmx_write MACRO
-	BYTE	0Fh, 079h
-ENDM
-
 vmx_on MACRO
 	BYTE	0F3h, 0Fh, 0C7h
 ENDM
@@ -60,9 +46,6 @@ ENDM
 vmx_launch MACRO
 	BYTE	0Fh, 01h, 0C2h
 ENDM
-
-
-
 
 
 MODRM_EAX_06 MACRO   ;/* [EAX], with reg/opcode: /6 */
@@ -160,15 +143,6 @@ VmxRead PROC
 	ret
 VmxRead ENDP
 
-; void vmxWrite( field,value)
-VmxWrite PROC 
-	mov rax,rcx
-	mov rcx,rdx	
-	vmx_write
-	MODRM_EAX_ECX  ;read value stored in ecx
-	ret
-VmxWrite ENDP
-
 ;_vmxOff()
 VmxTurnOff PROC 
 	vmx_off
@@ -239,20 +213,23 @@ VmxResume PROC
 	ret
 VmxResume ENDP
 
-;HvmEventCallback(PCPU Cpu,PGUEST_REGS GuestRegs,ULONG64 Ticks1)
+;=== HvmEventCallback(PCPU Cpu,PGUEST_REGS GuestRegs,ULONG64 Ticks1) ===
+
 VmxVmexitHandler PROC   
 
 	HVM_SAVE_ALL_NOSEGREGS
 	
 	mov     rcx, [rsp + 80h] ;PCPU
-	mov 	rdx, rsp		;GuestRegs
-	mov 	r8, 0		;TSC
+	mov 	rdx, rsp		 ;GuestRegs
+	mov 	r8, 0		     ;TSC
+	
 	sub	rsp, 28h
 
 	;rdtsc
 	
 	call	HvmEventCallback
-	add	rsp, 28h	
+	add	rsp, 28h
+	
 	HVM_RESTORE_ALL_NOSEGREGS	
 	vmx_resume
 	ret

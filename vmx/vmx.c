@@ -86,7 +86,7 @@ BOOLEAN NTAPI VmxIsImplemented ()
   return (BOOLEAN) (CmIsBitSet (ecx, 5));
 }
 
-static VOID VmxHandleInterception (
+VOID VmxHandleInterception (
   PCPU Cpu,
   PGUEST_REGS GuestRegs,
   BOOLEAN WillBeAlsoHandledByGuestHv
@@ -101,38 +101,27 @@ static VOID VmxHandleInterception (
 
   Exitcode = VmxRead (VM_EXIT_REASON);
 
-#if DEBUG_LEVEL>2
-  _KdPrint (("VmxHandleInterception(): Exitcode %x\n", Exitcode));
-#endif
-
   // search for a registered trap for this interception
   Status = TrFindRegisteredTrap (Cpu, GuestRegs, Exitcode, &Trap);
-  if (!NT_SUCCESS (Status)) {
-    _KdPrint (("VmxHandleInterception(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", Exitcode));
-    //VmxCrash (Cpu, GuestRegs);
+  if (!NT_SUCCESS (Status))
+  {
+    KdPrint (("VmxHandleInterception(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", Exitcode));
     Hvm->ArchShutdown (Cpu, GuestRegs);
     return;
   }
-  // we found a trap handler
 
-  if (!NT_SUCCESS (Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv))) {
-    _KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
-  }
+  Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv);
+  if (!NT_SUCCESS (Status))
+    KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
 }
 
-static VOID NTAPI VmxDispatchEvent (
+VOID NTAPI VmxDispatchEvent (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 )
 {
-#if DEBUG_LEVEL>1
-  _KdPrint (("VmxDispatchEvent(): exitcode = %x\n", VmxRead (VM_EXIT_REASON)));
-#endif
-
-  VmxHandleInterception (Cpu, GuestRegs, FALSE
+  VmxHandleInterception (Cpu, GuestRegs, FALSE);
                          /* this intercept will not be handled by guest hv */
-    );
-
 }
 
 static VOID NTAPI VmxDispatchNestedEvent (
@@ -166,7 +155,7 @@ static VOID NTAPI VmxAdjustRip (
   ULONG64 Delta
 )
 {
-  VmxWrite (GUEST_RIP, VmxRead (GUEST_RIP) + Delta);
+  __vmx_vmwrite (GUEST_RIP, VmxRead (GUEST_RIP) + Delta);
   return;
 }
 
@@ -198,13 +187,13 @@ NTSTATUS NTAPI VmxFillGuestSelectorData (
   if (!Selector)
     uAccessRights |= 0x10000;
 
-  VmxWrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
-  VmxWrite (GUEST_ES_LIMIT + Segreg * 2, SegmentSelector.limit);
-  VmxWrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
+  __vmx_vmwrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
+  __vmx_vmwrite (GUEST_ES_LIMIT + Segreg * 2, SegmentSelector.limit);
+  __vmx_vmwrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
 
   if ((Segreg == LDTR) || (Segreg == TR))
     // don't setup for FS/GS - their bases are stored in MSR values
-    VmxWrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
+    __vmx_vmwrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
 
   return STATUS_SUCCESS;
 }
@@ -229,53 +218,53 @@ static NTSTATUS VmxSetupVMCS (
 
   /*16BIT Host-Statel Fields. */
 #ifdef _X86_
-  VmxWrite (HOST_ES_SELECTOR, RegGetEs () & 0xf8);
-  VmxWrite (HOST_CS_SELECTOR, RegGetCs () & 0xf8);
-  VmxWrite (HOST_SS_SELECTOR, RegGetSs () & 0xf8);
-  VmxWrite (HOST_DS_SELECTOR, RegGetDs () & 0xf8);
+  __vmx_vmwrite (HOST_ES_SELECTOR, RegGetEs () & 0xf8);
+  __vmx_vmwrite (HOST_CS_SELECTOR, RegGetCs () & 0xf8);
+  __vmx_vmwrite (HOST_SS_SELECTOR, RegGetSs () & 0xf8);
+  __vmx_vmwrite (HOST_DS_SELECTOR, RegGetDs () & 0xf8);
 #else
-  VmxWrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
-  VmxWrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
-  VmxWrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
-  VmxWrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
+  __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
 #endif
-  VmxWrite (HOST_FS_SELECTOR, (RegGetFs () & 0xf8));
-  VmxWrite (HOST_GS_SELECTOR, (RegGetGs () & 0xf8));
-  VmxWrite (HOST_TR_SELECTOR, (GetTrSelector () & 0xf8));
+  __vmx_vmwrite (HOST_FS_SELECTOR, (RegGetFs () & 0xf8));
+  __vmx_vmwrite (HOST_GS_SELECTOR, (RegGetGs () & 0xf8));
+  __vmx_vmwrite (HOST_TR_SELECTOR, (GetTrSelector () & 0xf8));
 
   /*64BIT Control Fields. */
-  VmxWrite (IO_BITMAP_A, Cpu->Vmx.IOBitmapAPA.LowPart);
+  __vmx_vmwrite (IO_BITMAP_A, Cpu->Vmx.IOBitmapAPA.LowPart);
 #ifdef VMX_ENABLE_PS2_KBD_SNIFFER
   *(((unsigned char *) (Cpu->Vmx.IOBitmapA)) + (0x60 / 8)) = 0x11;      //0x60 0x64 PS keyboard mouse
 #endif
-  VmxWrite (IO_BITMAP_A_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
-  VmxWrite (IO_BITMAP_B, Cpu->Vmx.IOBitmapBPA.LowPart);
+  __vmx_vmwrite (IO_BITMAP_A_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
+  __vmx_vmwrite (IO_BITMAP_B, Cpu->Vmx.IOBitmapBPA.LowPart);
   // FIXME???
   //*(((unsigned char*)(Cpu->Vmx.IOBitmapB))+((0xc880-0x8000)/8))=0xff;  //0xc880-0xc887  
-  VmxWrite (IO_BITMAP_B_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
+  __vmx_vmwrite (IO_BITMAP_B_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
 
-  VmxWrite (MSR_BITMAP, Cpu->Vmx.MSRBitmapPA.LowPart);
-  VmxWrite (MSR_BITMAP_HIGH, Cpu->Vmx.MSRBitmapPA.HighPart);
+  __vmx_vmwrite (MSR_BITMAP, Cpu->Vmx.MSRBitmapPA.LowPart);
+  __vmx_vmwrite (MSR_BITMAP_HIGH, Cpu->Vmx.MSRBitmapPA.HighPart);
   //VM_EXIT_MSR_STORE_ADDR          = 0x00002006,  //no init
   //VM_EXIT_MSR_STORE_ADDR_HIGH     = 0x00002007,  //no init
   //VM_EXIT_MSR_LOAD_ADDR           = 0x00002008,  //no init
   //VM_EXIT_MSR_LOAD_ADDR_HIGH      = 0x00002009,  //no init
   //VM_ENTRY_MSR_LOAD_ADDR          = 0x0000200a,  //no init
   //VM_ENTRY_MSR_LOAD_ADDR_HIGH     = 0x0000200b,  //no init
-  VmxWrite (TSC_OFFSET, 0);
-  VmxWrite (TSC_OFFSET_HIGH, 0);
+  __vmx_vmwrite (TSC_OFFSET, 0);
+  __vmx_vmwrite (TSC_OFFSET_HIGH, 0);
   //VIRTUAL_APIC_PAGE_ADDR          = 0x00002012,   //no init
   //VIRTUAL_APIC_PAGE_ADDR_HIGH     = 0x00002013,   //no init
 
   /*64BIT Guest-Statel Fields. */
-  VmxWrite (VMCS_LINK_POINTER, 0xffffffff);
-  VmxWrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
+  __vmx_vmwrite (VMCS_LINK_POINTER, 0xffffffff);
+  __vmx_vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
 
-  VmxWrite (GUEST_IA32_DEBUGCTL, MsrRead (MSR_IA32_DEBUGCTL) & 0xffffffff);
-  VmxWrite (GUEST_IA32_DEBUGCTL_HIGH, MsrRead (MSR_IA32_DEBUGCTL) >> 32);
+  __vmx_vmwrite (GUEST_IA32_DEBUGCTL, MsrRead (MSR_IA32_DEBUGCTL) & 0xffffffff);
+  __vmx_vmwrite (GUEST_IA32_DEBUGCTL_HIGH, MsrRead (MSR_IA32_DEBUGCTL) >> 32);
 
   /*32BIT Control Fields. */
-  VmxWrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));      //disable Vmexit by Extern-interrupt,NMI and Virtual NMI 
+  __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));      //disable Vmexit by Extern-interrupt,NMI and Virtual NMI 
   Interceptions = 0;
 #ifdef VMX_ENABLE_MSR_BITMAP
   Interceptions |= CPU_BASED_ACTIVATE_MSR_BITMAP;
@@ -288,29 +277,29 @@ static NTSTATUS VmxSetupVMCS (
 #ifdef INTERCEPT_RDTSCs
   Interceptions |= CPU_BASED_RDTSC_EXITING;
 #endif
-  VmxWrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
+  __vmx_vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
 
 #ifdef INTERCEPT_RDTSCs
-  VmxWrite (EXCEPTION_BITMAP, 1 << 1);  // intercept #DB
+  __vmx_vmwrite (EXCEPTION_BITMAP, 1 << 1);  // intercept #DB
 #endif
-  VmxWrite (PAGE_FAULT_ERROR_CODE_MASK, 0);
-  VmxWrite (PAGE_FAULT_ERROR_CODE_MATCH, 0);
-  VmxWrite (CR3_TARGET_COUNT, 0);
+  __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MASK, 0);
+  __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MATCH, 0);
+  __vmx_vmwrite (CR3_TARGET_COUNT, 0);
 
 #ifdef _X86_
-  VmxWrite (VM_EXIT_CONTROLS, VmxAdjustControls (VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
-  VmxWrite (VM_ENTRY_CONTROLS, VmxAdjustControls (0, MSR_IA32_VMX_ENTRY_CTLS));
+  __vmx_vmwrite (VM_EXIT_CONTROLS, VmxAdjustControls (VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
+  __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (0, MSR_IA32_VMX_ENTRY_CTLS));
 #else
-  VmxWrite (VM_EXIT_CONTROLS,
+  __vmx_vmwrite (VM_EXIT_CONTROLS,
             VmxAdjustControls (VM_EXIT_IA32E_MODE | VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
-  VmxWrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
+  __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
 #endif
 
-  VmxWrite (VM_EXIT_MSR_STORE_COUNT, 0);
-  VmxWrite (VM_EXIT_MSR_LOAD_COUNT, 0);
+  __vmx_vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
+  __vmx_vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
 
-  VmxWrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
-  VmxWrite (VM_ENTRY_INTR_INFO_FIELD, 0);
+  __vmx_vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
+  __vmx_vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
 
   //VM_ENTRY_EXCEPTION_ERROR_CODE   = 0x00004018,  //no init
   //VM_ENTRY_INSTRUCTION_LEN        = 0x0000401a,  //no init
@@ -320,38 +309,38 @@ static NTSTATUS VmxSetupVMCS (
 
   /*32BIT Guest-Statel Fields. */
 
-  VmxWrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
-  VmxWrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
+  __vmx_vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
+  __vmx_vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
 
-  VmxWrite (GUEST_INTERRUPTIBILITY_INFO, 0);
-  VmxWrite (GUEST_ACTIVITY_STATE, 0);   //Active state          
+  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
+  __vmx_vmwrite (GUEST_ACTIVITY_STATE, 0);   //Active state          
   //GUEST_SM_BASE          = 0x98000,   //no init
-  VmxWrite (GUEST_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));
+  __vmx_vmwrite (GUEST_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));
 
   /*32BIT Host-Statel Fields. */
 
-  VmxWrite (HOST_IA32_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));     //no use
+  __vmx_vmwrite (HOST_IA32_SYSENTER_CS, MsrRead (MSR_IA32_SYSENTER_CS));     //no use
 
   /* NATURAL Control State Fields:need not setup. */
-  VmxWrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
+  __vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
   //VmxWrite(CR4_GUEST_HOST_MASK, X86_CR4_VMXE|X86_CR4_PAE|X86_CR4_PSE);//disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
-  VmxWrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
 
-  VmxWrite (CR0_READ_SHADOW, (RegGetCr4 () & X86_CR0_PG) | X86_CR0_PG);
+  __vmx_vmwrite (CR0_READ_SHADOW, (RegGetCr4 () & X86_CR0_PG) | X86_CR0_PG);
 
-  VmxWrite (CR4_READ_SHADOW, 0);
-  VmxWrite (CR3_TARGET_VALUE0, 0);      //no use
-  VmxWrite (CR3_TARGET_VALUE1, 0);      //no use                        
-  VmxWrite (CR3_TARGET_VALUE2, 0);      //no use
-  VmxWrite (CR3_TARGET_VALUE3, 0);      //no use
+  __vmx_vmwrite (CR4_READ_SHADOW, 0);
+  __vmx_vmwrite (CR3_TARGET_VALUE0, 0);      //no use
+  __vmx_vmwrite (CR3_TARGET_VALUE1, 0);      //no use                        
+  __vmx_vmwrite (CR3_TARGET_VALUE2, 0);      //no use
+  __vmx_vmwrite (CR3_TARGET_VALUE3, 0);      //no use
 
   /* NATURAL Read-only State Fields:need not setup. */
 
   /* NATURAL GUEST State Fields. */
 
-  VmxWrite (GUEST_CR0, RegGetCr0 ());
-  VmxWrite (GUEST_CR3, RegGetCr3 ());
-  VmxWrite (GUEST_CR4, RegGetCr4 ());
+  __vmx_vmwrite (GUEST_CR0, RegGetCr0 ());
+  __vmx_vmwrite (GUEST_CR3, RegGetCr3 ());
+  __vmx_vmwrite (GUEST_CR4, RegGetCr4 ());
 
   GdtBase = (PVOID) GetGdtBase ();
 
@@ -369,74 +358,74 @@ static NTSTATUS VmxSetupVMCS (
 
 #ifdef _X86_
   CmInitializeSegmentSelector (&SegmentSelector, RegGetEs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_ES_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_ES_BASE, SegmentSelector.base);
 
   CmInitializeSegmentSelector (&SegmentSelector, RegGetCs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_CS_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_CS_BASE, SegmentSelector.base);
 
   CmInitializeSegmentSelector (&SegmentSelector, RegGetSs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_SS_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_SS_BASE, SegmentSelector.base);
 
   CmInitializeSegmentSelector (&SegmentSelector, RegGetDs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_DS_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_DS_BASE, SegmentSelector.base);
 
   CmInitializeSegmentSelector (&SegmentSelector, RegGetFs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_FS_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_FS_BASE, SegmentSelector.base);
 
   CmInitializeSegmentSelector (&SegmentSelector, RegGetGs (), (PVOID) GetGdtBase ());
-  VmxWrite (GUEST_GS_BASE, SegmentSelector.base);
+  __vmx_vmwrite (GUEST_GS_BASE, SegmentSelector.base);
 #else
-  VmxWrite (GUEST_ES_BASE, 0);
-  VmxWrite (GUEST_CS_BASE, 0);
-  VmxWrite (GUEST_SS_BASE, 0);
-  VmxWrite (GUEST_DS_BASE, 0);
-  VmxWrite (GUEST_FS_BASE, MsrRead (MSR_FS_BASE));
-  VmxWrite (GUEST_GS_BASE, MsrRead (MSR_GS_BASE));
+  __vmx_vmwrite (GUEST_ES_BASE, 0);
+  __vmx_vmwrite (GUEST_CS_BASE, 0);
+  __vmx_vmwrite (GUEST_SS_BASE, 0);
+  __vmx_vmwrite (GUEST_DS_BASE, 0);
+  __vmx_vmwrite (GUEST_FS_BASE, MsrRead (MSR_FS_BASE));
+  __vmx_vmwrite (GUEST_GS_BASE, MsrRead (MSR_GS_BASE));
 #endif
 
   // LDTR/TR bases have been set in VmxFillGuestSelectorData()
-  VmxWrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
-  VmxWrite (GUEST_IDTR_BASE, GetIdtBase ());
+  __vmx_vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
+  __vmx_vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
 
-  VmxWrite (GUEST_DR7, 0x400);
-  VmxWrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
-  VmxWrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
-  VmxWrite (GUEST_RFLAGS, RegGetRflags ());
+  __vmx_vmwrite (GUEST_DR7, 0x400);
+  __vmx_vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
+  __vmx_vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
+  __vmx_vmwrite (GUEST_RFLAGS, RegGetRflags ());
   //VmxWrite(GUEST_PENDING_DBG_EXCEPTIONS, 0);//no init
-  VmxWrite (GUEST_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
-  VmxWrite (GUEST_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (GUEST_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (GUEST_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
 
   /* HOST State Fields. */
-  VmxWrite (HOST_CR0, RegGetCr0 ());
-  VmxWrite (HOST_CR3, RegGetCr3 ());
-  VmxWrite (HOST_CR4, RegGetCr4 ());
+  __vmx_vmwrite (HOST_CR0, RegGetCr0 ());
+  __vmx_vmwrite (HOST_CR3, RegGetCr3 ());
+  __vmx_vmwrite (HOST_CR4, RegGetCr4 ());
 
-  VmxWrite (HOST_FS_BASE, MsrRead (MSR_FS_BASE));
-  VmxWrite (HOST_GS_BASE, MsrRead (MSR_GS_BASE));
+  __vmx_vmwrite (HOST_FS_BASE, MsrRead (MSR_FS_BASE));
+  __vmx_vmwrite (HOST_GS_BASE, MsrRead (MSR_GS_BASE));
 
   // TODO: we must setup our own TSS
   // FIXME???
 
   CmInitializeSegmentSelector (&SegmentSelector, GetTrSelector (), (PVOID) GetGdtBase ());
-  VmxWrite (HOST_TR_BASE, SegmentSelector.base);
+  __vmx_vmwrite (HOST_TR_BASE, SegmentSelector.base);
 
-  VmxWrite (HOST_GDTR_BASE, (ULONG64) Cpu->GdtArea);
-  VmxWrite (HOST_IDTR_BASE, (ULONG64) Cpu->IdtArea);
+  __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) Cpu->GdtArea);
+  __vmx_vmwrite (HOST_IDTR_BASE, (ULONG64) Cpu->IdtArea);
 
 // FIXME???
 //      VmxWrite(HOST_GDTR_BASE, (ULONG64)GetGdtBase());
 //      VmxWrite(HOST_IDTR_BASE, (ULONG64)GetIdtBase());
 
-  VmxWrite (HOST_IA32_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
-  VmxWrite (HOST_IA32_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, MsrRead (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, MsrRead (MSR_IA32_SYSENTER_EIP));
 
 #ifdef _X86_
-  VmxWrite (HOST_RSP, g_HostStackBaseAddress + 0x0C00); //setup host sp at vmxLaunch(...)
+  __vmx_vmwrite (HOST_RSP, g_HostStackBaseAddress + 0x0C00); //setup host sp at vmxLaunch(...)
 #else
-  VmxWrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
+  __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
 #endif
 
-  VmxWrite (HOST_RIP, (ULONG64) VmxVmexitHandler);      //setup host ip:CmSlipIntoMatrix
+  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);      //setup host ip:CmSlipIntoMatrix
 
   _KdPrint (("VmxSetupVMCS(): Exit\n"));
 
@@ -449,9 +438,9 @@ NTSTATUS NTAPI VmxInitialize (
   PVOID GuestRsp
 )
 {
+    NTSTATUS Status;
   PHYSICAL_ADDRESS AlignedVmcsPA;
   ULONG64 VaDelta;
-  NTSTATUS Status;
   PHYSICAL_ADDRESS t;
 
 #ifdef _X86_
@@ -597,7 +586,7 @@ static VOID VmxGenerateTrampolineToGuest (
     return;
 
   // assume Trampoline buffer is big enough
-  VmxWrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & ~0x100);     // disable TF
+  __vmx_vmwrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & ~0x100);     // disable TF
 
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RCX, GuestRegs->rcx);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RDX, GuestRegs->rdx);

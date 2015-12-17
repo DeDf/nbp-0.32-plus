@@ -31,38 +31,24 @@ VOID NTAPI HvmEventCallback (
   PGUEST_REGS GuestRegs
 )
 {
-  NTSTATUS Status;
+    if (!Cpu || !GuestRegs)
+        return;
 
-  if (!Cpu || !GuestRegs)
-    return;
+     __vmx_vmread (GUEST_RSP, &GuestRegs->rsp);
 
-  // FIXME: This should be moved away from the HVM to VMX-specific code!!!
-  if (Hvm->Architecture == ARCH_VMX)
-#ifndef _X86_
-    GuestRegs->rsp = VmxRead (GUEST_RSP);
-#else
-  GuestRegs->rsp = (ULONG32)VmxRead (GUEST_RSP);
-#endif
+    if (Hvm->ArchIsNestedEvent (Cpu, GuestRegs))
+    {
+        // it's an event of a nested guest
+        Hvm->ArchDispatchNestedEvent (Cpu, GuestRegs);
 
-  if (Hvm->ArchIsNestedEvent (Cpu, GuestRegs)) {
+        __vmx_vmwrite (GUEST_RSP, GuestRegs->rsp);
 
-    // it's an event of a nested guest
-    Hvm->ArchDispatchNestedEvent (Cpu, GuestRegs);
+        return;
+    }
 
-    // FIXME: This should be moved away from the HVM to VMX-specific code!!!
-    if (Hvm->Architecture == ARCH_VMX)
-      VmxWrite (GUEST_RSP, GuestRegs->rsp);
+    VmxHandleInterception (Cpu, GuestRegs, FALSE);
 
-    return;
-  }
-  // it's an original event
-  Hvm->ArchDispatchEvent (Cpu, GuestRegs);
-
-  // FIXME: This should be moved away from the HVM to VMX-specific code!!!
-  if (Hvm->Architecture == ARCH_VMX)
-    VmxWrite (GUEST_RSP, GuestRegs->rsp);
-
-  return;
+    __vmx_vmwrite (GUEST_RSP, GuestRegs->rsp);
 }
 
 static NTSTATUS HvmSetupGdt (
@@ -191,14 +177,10 @@ NTSTATUS NTAPI HvmSubvertCpu (
   //
   Cpu = (PCPU) ((PCHAR) HostKernelStackBase + HOST_STACK_SIZE_IN_PAGES * PAGE_SIZE - 8 - sizeof (CPU));
 
-  // 内核栈基址
-  Cpu->HostStack = HostKernelStackBase;
-  // 自身的指针 for interrupt handlers which will address CPU through the FS
-  Cpu->SelfPointer = Cpu;
-  // 当前处理器数量
-  Cpu->ProcessorNumber = KeGetCurrentProcessorNumber ();
-  // TODISCOVER: 是否嵌套
-  Cpu->Nested = FALSE;
+  Cpu->HostStack       = HostKernelStackBase;    // 内核栈基址
+  Cpu->SelfPointer     = Cpu;                    // 自身的指针
+  Cpu->ProcessorNumber = KeGetCurrentProcessorNumber ();  // 当前处理器数量
+  Cpu->Nested          = FALSE;                  // TODISCOVER: 是否嵌套
 
   InitializeListHead (&Cpu->GeneralTrapsList);   // 初始化普通陷入事件记录链
   InitializeListHead (&Cpu->MsrTrapsList);       // 初始化MSR读写陷入事件记录链
@@ -245,8 +227,9 @@ NTSTATUS NTAPI HvmSubvertCpu (
   // CmSlipIntoMatrix即HvmResumeGuest
   //
   Status = VmxInitialize (Cpu, CmSlipIntoMatrix, GuestRsp);
-  if (!NT_SUCCESS (Status)) {
-    _KdPrint (("HvmSubvertCpu(): ArchInitialize() failed with status 0x%08hX\n", Status));
+  if (!NT_SUCCESS (Status))
+  {
+    KdPrint (("HvmSubvertCpu(): ArchInitialize() failed with status 0x%08hX\n", Status));
     return Status;
   }
 
@@ -329,23 +312,18 @@ static NTSTATUS NTAPI HvmLiberateCpu (
 #endif
 }
 
-NTSTATUS NTAPI HvmSpitOutBluepill (
-)
+NTSTATUS NTAPI HvmSpitOutBluepill ()
 {
-
 #ifndef ENABLE_HYPERCALLS
 
   return STATUS_NOT_SUPPORTED;
 
 #else
 
-  CCHAR cProcessorNumber;
+  CCHAR i;
   NTSTATUS Status, CallbackStatus;
 
   g_bDisableComOutput = TRUE;
-
-  _KdPrint (("HvmSpitOutBluepill(): Going to liberate %d processor%s\n",
-             KeNumberProcessors, KeNumberProcessors == 1 ? "" : "s"));
 
   //
   // 获得互斥体g_HvmMutex对象, 保证一时间只有一个HvmSpitOutBluepill函数在执行
@@ -355,14 +333,14 @@ NTSTATUS NTAPI HvmSpitOutBluepill (
   //
   // 遍历所有处理器
   //
-  for (cProcessorNumber = 0; cProcessorNumber < KeNumberProcessors; cProcessorNumber++) {
-
-    _KdPrint (("HvmSpitOutBluepill(): Liberating processor #%d\n", cProcessorNumber));
+  for (i = 0; i < KeNumberProcessors; i++)
+  {
+    KdPrint (("HvmSpitOutBluepill(): Liberating processor #%d\n", i));
 
     //
     // 向每个处理器投递消息，要求执行HvmLiberateCpu, 来通知CPU退出Guest模式
     //
-    Status = CmDeliverToProcessor (cProcessorNumber, HvmLiberateCpu, NULL, &CallbackStatus);
+    Status = CmDeliverToProcessor (i, HvmLiberateCpu, NULL, &CallbackStatus);
 
     //
     // 验证是否投递成功
@@ -389,51 +367,29 @@ NTSTATUS NTAPI HvmSpitOutBluepill (
 NTSTATUS NTAPI HvmSwallowBluepill ()
 {
     NTSTATUS Status, CallbackStatus;
-  CCHAR cProcessorNumber;
+    CCHAR i;
+    KIRQL OldIrql;
 
-  //
-  // 获得互斥体g_HvmMutex对象, 保证一时间只有一个HvmSwallowBluepill函数在执行
-  //
   KeWaitForSingleObject (&g_HvmMutex, Executive, KernelMode, FALSE, NULL);
 
-  //
   // 遍历所有处理器
-  //
-  for (cProcessorNumber = 0; cProcessorNumber < KeNumberProcessors; cProcessorNumber++)
+  for (i = 0; i < KeNumberProcessors; i++)
   {
-    _KdPrint (("HvmSwallowBluepill(): Subverting processor #%d\n", cProcessorNumber));
+    KeSetSystemAffinityThread ((KAFFINITY) ((ULONG_PTR)1 << i));  // 将代码运行在指定CPU
+    OldIrql = KeRaiseIrqlToDpcLevel ();
 
-    //
-    // 向每个处理器投递消息，要求执行CmSubvert
-    // CmDeliverToProcessor通过KeSetSystemAffinityThread将代码运行在指定CPU上，并提升IRQL为DPC_LEVEL
-    // CmSubvert的流程是保存所有寄存器(除了段寄存器)的内容到栈里后，调用HvmSubvertCpu
-    //
-    Status = CmDeliverToProcessor (cProcessorNumber, CmSubvert, NULL, &CallbackStatus);
+    Status = CmSubvert (NULL);  // CmSubvert的流程是保存所有寄存器(除了段寄存器)的内容到栈里后，调用HvmSubvertCpu
 
-    //
-    // 验证是否投递成功
-    //
-    if (!NT_SUCCESS (Status))
+    KeLowerIrql (OldIrql);
+    KeRevertToUserAffinityThread ();
+
+    if (Status)
     {
-      _KdPrint (("HvmSwallowBluepill(): CmDeliverToProcessor() failed with status 0x%08hX\n", Status));
+      KdPrint (("HvmSwallowBluepill(): HvmSubvertCpu() failed with status 0x%08hX\n", Status));
+
       KeReleaseMutex (&g_HvmMutex, FALSE);
-
       HvmSpitOutBluepill ();
-
       return Status;
-    }
-
-    //
-    // 验证HvmSubvertCpu是否成功
-    //
-    if (!NT_SUCCESS (CallbackStatus))
-    {
-      _KdPrint (("HvmSwallowBluepill(): HvmSubvertCpu() failed with status 0x%08hX\n", CallbackStatus));
-      KeReleaseMutex (&g_HvmMutex, FALSE);
-
-      HvmSpitOutBluepill ();
-
-      return CallbackStatus;
     }
   }
 
@@ -449,23 +405,4 @@ NTSTATUS NTAPI HvmSwallowBluepill ()
   }
 
   return STATUS_SUCCESS;
-}
-
-NTSTATUS HvmInit ()
-{
-    Hvm = &Vmx;
-    if (Vmx.ArchIsHvmImplemented ())
-    {
-        KdPrint (("HvmInit(): Running on VMX~\n"));
-        //
-        // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
-        //
-        KeInitializeMutex (&g_HvmMutex, 0);
-        return STATUS_SUCCESS;
-    }
-    else
-    {
-        KdPrint (("HvmInit(): VMX is not supported!\n"));
-        return STATUS_NOT_SUPPORTED;
-    }
 }

@@ -83,18 +83,15 @@ typedef struct _CPU
 
   ULONG64 ComPrintLastTsc;
 
-} CPU,
- *PCPU;
+} CPU, *PCPU;
 
-PHVM_DEPENDENT Hvm;
+extern PHVM_DEPENDENT Hvm;
 
 extern HVM_DEPENDENT Vmx;
 
 NTSTATUS NTAPI HvmSwallowBluepill ();
 
 NTSTATUS NTAPI HvmSpitOutBluepill ();
-
-NTSTATUS HvmInit ();
 
 VOID NTAPI HvmVmExitCallback (
   PCPU Cpu,
