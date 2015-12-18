@@ -3,52 +3,34 @@
  */
 
 #pragma once
-#include "common.h"
 #include <ntddk.h>
 
-USHORT NTAPI RegGetCs ();
-USHORT NTAPI RegGetDs ();
-USHORT NTAPI RegGetEs ();
-USHORT NTAPI RegGetSs ();
-USHORT NTAPI RegGetFs ();
-USHORT NTAPI RegGetGs ();
+ULONG64 RegGetTSC ();
 
-ULONG64 NTAPI RegGetCr0 ();
-ULONG64 NTAPI RegGetCr2 ();
-ULONG64 NTAPI RegGetCr3 ();
-ULONG64 NTAPI RegGetCr4 ();
-ULONG64 NTAPI RegGetCr8 ();
+USHORT RegGetCs ();
+USHORT RegGetDs ();
+USHORT RegGetEs ();
+USHORT RegGetSs ();
+USHORT RegGetFs ();
+USHORT RegGetGs ();
 
-ULONG64 NTAPI RegGetRflags ();
-ULONG64 NTAPI RegGetRsp ();
+ULONG64 RegGetRflags ();
+ULONG64 RegGetRsp ();
 
-ULONG64 NTAPI GetIdtBase ();
-USHORT NTAPI GetIdtLimit ();
-ULONG64 NTAPI GetGdtBase ();
-USHORT NTAPI GetGdtLimit ();
-USHORT NTAPI GetLdtr ();
+ULONG64 GetIdtBase ();
+USHORT  GetIdtLimit ();
+ULONG64 GetGdtBase ();
+USHORT  GetGdtLimit ();
 
-USHORT NTAPI GetTrSelector ();
+USHORT GetTrSelector ();
+USHORT GetLdtr ();
 
-ULONG64 NTAPI RegGetRbx ();
-ULONG64 NTAPI RegGetRax ();
-
-ULONG64 NTAPI RegGetTSC ();
-
-ULONG64 NTAPI RegGetDr0 ();
-ULONG64 NTAPI RegGetDr1 ();
-ULONG64 NTAPI RegGetDr2 ();
-ULONG64 NTAPI RegGetDr3 ();
-ULONG64 NTAPI RegGetDr6 ();
-
-ULONG64 NTAPI RegSetDr0 ();
-ULONG64 NTAPI RegSetDr1 ();
-ULONG64 NTAPI RegSetDr2 ();
-ULONG64 NTAPI RegSetDr3 ();
-
-ULONG64 NTAPI RegSetCr3 (
-  PVOID NewCr3
-);
-ULONG64 NTAPI RegSetCr8 (
-  ULONG64 NewCr8
-);
+ULONG64 RegGetDr0 ();
+ULONG64 RegGetDr1 ();
+ULONG64 RegGetDr2 ();
+ULONG64 RegGetDr3 ();
+//
+ULONG64 RegSetDr0 ();
+ULONG64 RegSetDr1 ();
+ULONG64 RegSetDr2 ();
+ULONG64 RegSetDr3 ();

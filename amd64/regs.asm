@@ -1,4 +1,3 @@
-; only some boring stuff here...
 
 .CODE
 
@@ -8,17 +7,6 @@ RegGetTSC PROC
 	or		rax, rdx
 	ret
 RegGetTSC ENDP
-
-
-RegGetRax PROC
-	mov		rax, rax
-	ret
-RegGetRax ENDP
-
-RegGetRbx PROC
-	mov		rax, rbx
-	ret
-RegGetRbx ENDP
 
 
 RegGetCs PROC
@@ -51,47 +39,6 @@ RegGetGs PROC
 	ret
 RegGetGs ENDP
 
-
-RegGetCr0 PROC
-	mov		rax, cr0
-	ret
-RegGetCr0 ENDP
-
-RegGetCr2 PROC
-	mov		rax, cr2
-	ret
-RegGetCr2 ENDP
-
-RegGetCr3 PROC
-	mov		rax, cr3
-	ret
-RegGetCr3 ENDP
-
-RegSetCr3 PROC
-	mov		cr3, rcx
-	ret
-RegSetCr3 ENDP
-
-RegGetCr4 PROC
-	mov		rax, cr4
-	ret
-RegGetCr4 ENDP
-
-RegGetCr8 PROC
-	mov		rax, cr8
-	ret
-RegGetCr8 ENDP
-
-RegSetCr8 PROC
-	mov		cr8, rcx
-	ret
-RegSetCr8 ENDP
-
-
-RegGetDr6 PROC
-	mov		rax, dr6
-	ret
-RegGetDr6 ENDP
 
 RegGetDr0 PROC
 	mov		rax, dr0
@@ -178,13 +125,11 @@ GetGdtLimit PROC
 	ret
 GetGdtLimit ENDP
 
-;add by cini
+
 GetLdtr PROC
 	sldt	rax
 	ret
 GetLdtr ENDP
-
-;add end
 
 GetTrSelector PROC
 	str	rax
