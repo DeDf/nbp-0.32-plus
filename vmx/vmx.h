@@ -8,9 +8,9 @@
 #include "common.h"
 #include "vmcs.h"
 
-#define BTS(b)					(1i64 << b)
-#define FEATURE_CONTROL_LOCKED        BTS(0)
-#define FEATURE_CONTROL_VMXON_ENABLED BTS(2)
+#define BTS64(b)					(1i64 << b)
+#define FEATURE_CONTROL_LOCKED        BTS64(0)
+#define FEATURE_CONTROL_VMXON_ENABLED BTS64(2)
 
  enum VMEXIT_EXITCODE
 {

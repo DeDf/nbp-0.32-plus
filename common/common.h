@@ -121,11 +121,8 @@ typedef NTSTATUS (
 * Attribute for segment selector. This is a copy of bit 40:47 & 52:55 of the
 * segment descriptor. 
 */
-typedef union
+typedef struct
 {
-  USHORT UCHARs;
-  struct
-  {
     USHORT type:4;              /* 0;  Bit 40-43 */
     USHORT s:1;                 /* 4;  Bit 44 */
     USHORT dpl:2;               /* 5;  Bit 45-46 */
@@ -136,7 +133,6 @@ typedef union
     USHORT db:1;                /* 10; Bit 54 */
     USHORT g:1;                 /* 11; Bit 55 */
     USHORT Gap:4;
-  } fields;
 } SEGMENT_ATTRIBUTES;
 
 typedef struct _TSS64
@@ -162,7 +158,7 @@ typedef struct _TSS64
 typedef struct
 {
   USHORT sel;
-  SEGMENT_ATTRIBUTES attributes;
+  USHORT attributes;
   ULONG32 limit;
   ULONG64 base;
 } SEGMENT_SELECTOR;
@@ -173,7 +169,11 @@ typedef struct
   USHORT BaseLow;
   UCHAR BaseMid;
   UCHAR AttributesLow;
-  UCHAR limit1attr1;
+  struct
+  {
+      UCHAR LimitHigh      : 4;
+      UCHAR AttributesHigh : 4;
+  };
   UCHAR BaseHigh;
 } SEGMENT_DESCRIPTOR, *PSEGMENT_DESCRIPTOR;
 

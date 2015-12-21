@@ -92,13 +92,13 @@ static NTSTATUS HvmSetupGdt (
   GuestTssDescriptor = (PSEGMENT_DESCRIPTOR) (GetGdtBase () + GetTrSelector ());
 
   GuestTssBase = GuestTssDescriptor->BaseLow | GuestTssDescriptor->BaseMid << 16 | GuestTssDescriptor->BaseHigh << 24;
-  GuestTssLimit = GuestTssDescriptor->LimitLow | (GuestTssDescriptor->limit1attr1 & 0xf) << 16;
-  if (GuestTssDescriptor->limit1attr1 & 0x80)
+  GuestTssLimit = GuestTssDescriptor->LimitLow | GuestTssDescriptor->LimitHigh << 16;
+  if (GuestTssDescriptor->AttributesHigh & 0x8)
     // 4096-bit granularity is enabled for this segment, scale the limit
     GuestTssLimit <<= 12;
 
   if (!(GuestTssDescriptor->AttributesLow & 0x10)) {
-    GuestTssBase = (*(PULONG64) ((PUCHAR) GuestTssDescriptor + 4)) & 0xffffffffff000000;
+    GuestTssBase  = (*(PULONG64) ((PUCHAR) GuestTssDescriptor + 4)) & 0xffffffffff000000;
     GuestTssBase |= (*(PULONG32) ((PUCHAR) GuestTssDescriptor + 2)) & 0x00ffffff;
   }
 #if DEBUG_LEVEL>2
