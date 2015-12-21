@@ -227,11 +227,12 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
   __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
 #endif
-  __vmx_vmwrite (HOST_FS_SELECTOR, (RegGetFs () & 0xf8));
-  __vmx_vmwrite (HOST_GS_SELECTOR, (RegGetGs () & 0xf8));
-  __vmx_vmwrite (HOST_TR_SELECTOR, (GetTrSelector () & 0xf8));
+  __vmx_vmwrite (HOST_FS_SELECTOR, RegGetFs () & 0xf8);
+  __vmx_vmwrite (HOST_GS_SELECTOR, RegGetGs () & 0xf8);
+  __vmx_vmwrite (HOST_TR_SELECTOR, GetTrSelector () & 0xf8);
 
   /*64BIT Control Fields. */
+
   __vmx_vmwrite (IO_BITMAP_A,      Cpu->Vmx.IOBitmapAPA.LowPart);
 #ifdef VMX_ENABLE_PS2_KBD_SNIFFER
   *(((unsigned char *) (Cpu->Vmx.IOBitmapA)) + (0x60 / 8)) = 0x11;      //0x60 0x64 PS keyboard mouse
@@ -245,6 +246,7 @@ static NTSTATUS VmxSetupVMCS (
 
   __vmx_vmwrite (MSR_BITMAP,      Cpu->Vmx.MSRBitmapPA.LowPart);
   __vmx_vmwrite (MSR_BITMAP_HIGH, Cpu->Vmx.MSRBitmapPA.HighPart);
+
   //VM_EXIT_MSR_STORE_ADDR          = 0x00002006,  //no init
   //VM_EXIT_MSR_STORE_ADDR_HIGH     = 0x00002007,  //no init
   //VM_EXIT_MSR_LOAD_ADDR           = 0x00002008,  //no init
@@ -267,16 +269,17 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
 
 #ifdef VMX_ENABLE_MSR_BITMAP
-  Interceptions |= CPU_BASED_ACTIVATE_MSR_BITMAP;
+  Interceptions |= CPU_BASED_ACTIVATE_MSR_BITMAP;  // MSR_BITMAP
 #endif
 
 #ifdef VMX_ENABLE_PS2_KBD_SNIFFER
-  Interceptions |= CPU_BASED_ACTIVATE_IO_BITMAP;
+  Interceptions |= CPU_BASED_ACTIVATE_IO_BITMAP;   // IO_BITMAP_A IO_BITMAP_B
 #endif
 
 #ifdef INTERCEPT_RDTSCs
   Interceptions |= CPU_BASED_RDTSC_EXITING;
 #endif
+  //KdPrint(("Proc_Base_exec_control : %08x\n", Interceptions));
   __vmx_vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
 
 #ifdef INTERCEPT_RDTSCs
@@ -301,6 +304,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
   __vmx_vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
 
+  //==========================================================================
+
   /*32BIT Read-only Fields:need no setup */
   //VM_ENTRY_EXCEPTION_ERROR_CODE   = 0x00004018,  //no init
   //VM_ENTRY_INSTRUCTION_LEN        = 0x0000401a,  //no init
@@ -312,9 +317,10 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
 
   __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
-  __vmx_vmwrite (GUEST_ACTIVITY_STATE, 0);   //Active state          
+  __vmx_vmwrite (GUEST_ACTIVITY_STATE,        0);   //Active state          
   //GUEST_SM_BASE          = 0x98000,   //no init
-  __vmx_vmwrite (GUEST_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));
+
+  __vmx_vmwrite (GUEST_SYSENTER_CS,     __readmsr (MSR_IA32_SYSENTER_CS));
 
   /*32BIT Host-Statel Fields. */
 
@@ -322,12 +328,11 @@ static NTSTATUS VmxSetupVMCS (
 
   /* NATURAL Control State Fields:need not setup. */
   __vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
-  //VmxWrite(CR4_GUEST_HOST_MASK, X86_CR4_VMXE|X86_CR4_PAE|X86_CR4_PSE);//disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
   __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
 
   __vmx_vmwrite (CR0_READ_SHADOW, (__readcr4 () & X86_CR0_PG) | X86_CR0_PG);
 
-  __vmx_vmwrite (CR4_READ_SHADOW,  0);
+  __vmx_vmwrite (CR4_READ_SHADOW,   0);
   __vmx_vmwrite (CR3_TARGET_VALUE0, 0);      //no use
   __vmx_vmwrite (CR3_TARGET_VALUE1, 0);      //no use                        
   __vmx_vmwrite (CR3_TARGET_VALUE2, 0);      //no use
@@ -402,7 +407,7 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
   __vmx_vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
 
-  CmInitializeSegmentSelector (&SegmentSelector, GetTrSelector (), (PVOID) GetGdtBase ());
+  CmInitializeSegmentSelector (&SegmentSelector, GetTrSelector (), GdtBase);
   __vmx_vmwrite (HOST_TR_BASE, SegmentSelector.base);
 
   __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) Cpu->GdtArea);
@@ -418,7 +423,7 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
 #endif
 
-  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);      //setup host ip
+  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
 
   _KdPrint (("VmxSetupVMCS(): Exit\n"));
 
@@ -545,8 +550,6 @@ NTSTATUS NTAPI VmxInitialize (
     VmxDisable ();
     return Status;
   }
-
-  KdPrint (("VmxInitialize(): Vmx enabled\n"));
 
   //
   // 读取MSR_EFE/CR0/CR3/CR4等寄存器的内容并记录到CPU结构

@@ -191,8 +191,8 @@ NTSTATUS NTAPI CmDumpGdt (
   while ((PUCHAR) SegmentDescriptor < GdtBase + GdtLimit) {
 
     // segment base is ignored for DS, ES and SS
-    SegBase = SegmentDescriptor->base0 | SegmentDescriptor->base1 << 16 | SegmentDescriptor->base2 << 24;
-    SegLimit = SegmentDescriptor->limit0 | (SegmentDescriptor->limit1attr1 & 0xf) << 16;
+    SegBase = SegmentDescriptor->BaseLow | SegmentDescriptor->BaseMid << 16 | SegmentDescriptor->BaseHigh << 24;
+    SegLimit = SegmentDescriptor->LimitLow | (SegmentDescriptor->limit1attr1 & 0xf) << 16;
 
     if (SegmentDescriptor->limit1attr1 & 0x80)
       // 4096-bit granularity is enabled for this segment, scale the limit
@@ -200,15 +200,15 @@ NTSTATUS NTAPI CmDumpGdt (
 
     if (*((PULONG64) SegmentDescriptor) == 0) {
       _KdPrint (("CmDumpGdt(): 0x%02X: NULL\n", Selector));
-    } else if (((SegmentDescriptor->attr0 & 0x10))) {
+    } else if (((SegmentDescriptor->AttributesLow & 0x10))) {
       _KdPrint (("CmDumpGdt(): 0x%02X: %s %02X %01X base 0x%p limit 0x%X\n",
                  Selector,
-                 !(SegmentDescriptor->attr0 & 8) ? "DATA  " :
+                 !(SegmentDescriptor->AttributesLow & 8) ? "DATA  " :
                  SegmentDescriptor->limit1attr1 & 0x20 ? "CODE64" : "CODE32",
-                 SegmentDescriptor->attr0, SegmentDescriptor->limit1attr1 >> 4, SegBase, SegLimit));
+                 SegmentDescriptor->AttributesLow, SegmentDescriptor->limit1attr1 >> 4, SegBase, SegLimit));
     } else {
 
-      Type = SegmentDescriptor->attr0 & 0xf;
+      Type = SegmentDescriptor->AttributesLow & 0xf;
       SegBase = (*(PULONG64) ((PUCHAR) SegmentDescriptor + 4)) & 0xffffffffff000000;
       SegBase |= (*(PULONG32) ((PUCHAR) SegmentDescriptor + 2)) & 0x00ffffff;
 
@@ -218,7 +218,7 @@ NTSTATUS NTAPI CmDumpGdt (
                  Type == 9 ? "ATSS64" :
                  Type == 0x0b ? "BTSS64" :
                  Type == 0x0c ? "CALLGATE64" : "*INVALID*",
-                 SegmentDescriptor->attr0, SegmentDescriptor->limit1attr1 >> 4, SegBase, SegLimit));
+                 SegmentDescriptor->AttributesLow, SegmentDescriptor->limit1attr1 >> 4, SegBase, SegLimit));
 
       SegmentDescriptor++;
       Selector += 8;
@@ -281,11 +281,11 @@ NTSTATUS NTAPI CmSetGdtEntry (
   if (!GdtBase || SelectorNumber > GdtLimit || (SelectorNumber & 7))
     return STATUS_INVALID_PARAMETER;
 
-  Descriptor.limit0 = (USHORT) (SegmentLimit & 0xffff);
-  Descriptor.base0 = (USHORT) ((ULONG64) SegmentBase & 0xffff);
-  Descriptor.base1 = (UCHAR) (((ULONG64) SegmentBase >> 16) & 0xff);
-  Descriptor.base2 = (UCHAR) (((ULONG64) SegmentBase >> 24) & 0xff);
-  Descriptor.attr0 = LowAttributes;
+  Descriptor.LimitLow = (USHORT) (SegmentLimit & 0xffff);
+  Descriptor.BaseLow = (USHORT) ((ULONG64) SegmentBase & 0xffff);
+  Descriptor.BaseMid = (UCHAR) (((ULONG64) SegmentBase >> 16) & 0xff);
+  Descriptor.BaseHigh = (UCHAR) (((ULONG64) SegmentBase >> 24) & 0xff);
+  Descriptor.AttributesLow = LowAttributes;
   Descriptor.limit1attr1 = (UCHAR) ((HighAttributes << 4) + (SegmentLimit >> 16));
 
   GdtBase[SelectorNumber >> 3] = Descriptor;
@@ -377,18 +377,18 @@ NTSTATUS NTAPI CmInitializeSegmentSelector (
     return STATUS_INVALID_PARAMETER;
 
   if (Selector & 0x4) {
-    _KdPrint (("CmInitializeSegmentSelector(): Given selector (0x%X) points to LDT\n", Selector));
+    KdPrint (("CmInitializeSegmentSelector(): Given selector (0x%X) points to LDT\n", Selector));
     return STATUS_INVALID_PARAMETER;
   }
 
   SegDesc = (PSEGMENT_DESCRIPTOR) ((PUCHAR) GdtBase + (Selector & ~0x7));
 
-  SegmentSelector->sel = Selector;
-  SegmentSelector->base = SegDesc->base0 | SegDesc->base1 << 16 | SegDesc->base2 << 24;
-  SegmentSelector->limit = SegDesc->limit0 | (SegDesc->limit1attr1 & 0xf) << 16;
-  SegmentSelector->attributes.UCHARs = SegDesc->attr0 | (SegDesc->limit1attr1 & 0xf0) << 4;
+  SegmentSelector->sel   = Selector;
+  SegmentSelector->base  = SegDesc->BaseLow | SegDesc->BaseMid << 16 | SegDesc->BaseHigh << 24;
+  SegmentSelector->limit = SegDesc->LimitLow | (SegDesc->limit1attr1 & 0xf) << 16;
+  SegmentSelector->attributes.UCHARs = SegDesc->AttributesLow | (SegDesc->limit1attr1 & 0xf0) << 4;
 
-  if (!(SegDesc->attr0 & LA_STANDARD)) {
+  if (!(SegDesc->AttributesLow & LA_STANDARD)) {
     ULONG64 tmp;
     // this is a TSS or callgate etc, save the base high part
     tmp = (*(PULONG64) ((PUCHAR) SegDesc + 8));

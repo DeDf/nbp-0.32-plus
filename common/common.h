@@ -169,14 +169,13 @@ typedef struct
 
 typedef struct
 {
-  USHORT limit0;
-  USHORT base0;
-  UCHAR base1;
-  UCHAR attr0;
+  USHORT LimitLow;
+  USHORT BaseLow;
+  UCHAR BaseMid;
+  UCHAR AttributesLow;
   UCHAR limit1attr1;
-  UCHAR base2;
-} SEGMENT_DESCRIPTOR,
- *PSEGMENT_DESCRIPTOR;
+  UCHAR BaseHigh;
+} SEGMENT_DESCRIPTOR, *PSEGMENT_DESCRIPTOR;
 
 typedef struct _INTERRUPT_GATE_DESCRIPTOR
 {
