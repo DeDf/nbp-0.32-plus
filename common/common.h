@@ -12,6 +12,8 @@
 
 // DEBUG settings -------------
 #define	ENABLE_DEBUG_PRINTS
+#define	ENABLE_HYPERCALLS       // ‘ –Ì–∂‘ÿ?
+//#define       SET_PCD_BIT     // Set PCD for BP's pages (Non Cached)
 
 //#define	DEBUG_LEVEL	1
 #define  DEBUG_LEVEL 1
@@ -31,10 +33,6 @@
 # define COMPRINT_QUEUE_TH 0x200000000
 # define COMPRINT_SLEEP 10000000000     // wait this many cycles after an overflow condition
 #endif // USE_COM_PRINTS
-
-// Various common settings ----- 
-#define	ENABLE_HYPERCALLS
-//#define       SET_PCD_BIT     // Set PCD for BP's pages (Non Cached)
 
 // BPKNOCK backdoor -------
 #define BP_KNOCK

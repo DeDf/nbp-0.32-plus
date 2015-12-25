@@ -282,8 +282,6 @@ static NTSTATUS NTAPI HvmLiberateCpu (
   ULONG64 Efer;
   PCPU Cpu;
 
-  // called at DPC level
-
   if (KeGetCurrentIrql () != DISPATCH_LEVEL)
     return STATUS_UNSUCCESSFUL;
 
@@ -291,10 +289,10 @@ static NTSTATUS NTAPI HvmLiberateCpu (
 
   _KdPrint (("HvmLiberateCpu(): Reading MSR_EFER on entry: 0x%X\n", Efer));
 
-  if (!NT_SUCCESS (Status = HcMakeHypercall (NBP_HYPERCALL_UNLOAD, 0, NULL))) {
-    _KdPrint (("HvmLiberateCpu(): HcMakeHypercall() failed on processor #%d, status 0x%08hX\n",
+  Status = HcMakeHypercall (NBP_HYPERCALL_UNLOAD, 0, NULL);
+  if (!NT_SUCCESS (Status)) {
+    KdPrint (("HvmLiberateCpu(): HcMakeHypercall() failed on processor #%d, status 0x%08hX\n",
                KeGetCurrentProcessorNumber (), Status));
-
     return Status;
   }
 
@@ -313,8 +311,8 @@ NTSTATUS NTAPI HvmSpitOutBluepill ()
 
 #else
 
-  CCHAR i;
-  NTSTATUS Status, CallbackStatus;
+    NTSTATUS Status, CallbackStatus;
+    CCHAR i;
 
   g_bDisableComOutput = TRUE;
 
@@ -349,8 +347,6 @@ NTSTATUS NTAPI HvmSpitOutBluepill ()
       _KdPrint (("HvmSpitOutBluepill(): HvmLiberateCpu() failed with status 0x%08hX\n", CallbackStatus));
     }
   }
-
-  _KdPrint (("HvmSpitOutBluepill(): Finished at irql %d\n", KeGetCurrentIrql ()));
 
   KeReleaseMutex (&g_HvmMutex, FALSE);
   return STATUS_SUCCESS;

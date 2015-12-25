@@ -27,12 +27,10 @@ extern ULONG g_uSubvertedCPUs;
 NTSTATUS NTAPI VmxDisable (
 )
 {
-  ULONG64 cr4;
   VmxTurnOff ();
-  cr4 = get_cr4 ();
+
   clear_in_cr4 (X86_CR4_VMXE);
-  cr4 = get_cr4 ();
-  _KdPrint (("VmxDisable(): CR4 after VmxDisable: 0x%llx\n", cr4));
+
   return STATUS_SUCCESS;
 }
 
@@ -233,19 +231,21 @@ static NTSTATUS VmxSetupVMCS (
 
   /*64BIT Control Fields. */
 
-  __vmx_vmwrite (IO_BITMAP_A,      Cpu->Vmx.IOBitmapAPA.LowPart);
-#ifdef VMX_ENABLE_PS2_KBD_SNIFFER
-  *(((unsigned char *) (Cpu->Vmx.IOBitmapA)) + (0x60 / 8)) = 0x11;      //0x60 0x64 PS keyboard mouse
-#endif
-  __vmx_vmwrite (IO_BITMAP_A_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
-  //
-  __vmx_vmwrite (IO_BITMAP_B,      Cpu->Vmx.IOBitmapBPA.LowPart);
-  // FIXME???
-  //*(((unsigned char*)(Cpu->Vmx.IOBitmapB))+((0xc880-0x8000)/8))=0xff;  //0xc880-0xc887  
-  __vmx_vmwrite (IO_BITMAP_B_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
-
-  __vmx_vmwrite (MSR_BITMAP,      Cpu->Vmx.MSRBitmapPA.LowPart);
-  __vmx_vmwrite (MSR_BITMAP_HIGH, Cpu->Vmx.MSRBitmapPA.HighPart);
+//   __vmx_vmwrite (IO_BITMAP_A,      Cpu->Vmx.IOBitmapAPA.LowPart);
+// #ifdef VMX_ENABLE_PS2_KBD_SNIFFER
+//   *(((unsigned char *) (Cpu->Vmx.IOBitmapA)) + (0x60 / 8)) = 0x11;      //0x60 0x64 PS keyboard mouse
+// #endif
+//   __vmx_vmwrite (IO_BITMAP_A_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
+//   KdPrint (("IOBitmapA %x\n", Cpu->Vmx.IOBitmapAPA.QuadPart));
+//   //
+//   __vmx_vmwrite (IO_BITMAP_B,      Cpu->Vmx.IOBitmapBPA.LowPart);
+//   //*(((unsigned char*)(Cpu->Vmx.IOBitmapB))+((0xc880-0x8000)/8))=0xff;  //0xc880-0xc887  // FIXME???
+//   __vmx_vmwrite (IO_BITMAP_B_HIGH, Cpu->Vmx.IOBitmapBPA.HighPart);
+//   KdPrint (("IOBitmapB %x\n", Cpu->Vmx.IOBitmapBPA.QuadPart));
+// 
+//   __vmx_vmwrite (MSR_BITMAP,      Cpu->Vmx.MSRBitmapPA.LowPart);
+//   __vmx_vmwrite (MSR_BITMAP_HIGH, Cpu->Vmx.MSRBitmapPA.HighPart);
+//   KdPrint (("MSRBitmap %x\n", Cpu->Vmx.MSRBitmapPA.QuadPart));
 
   //VM_EXIT_MSR_STORE_ADDR          = 0x00002006,  //no init
   //VM_EXIT_MSR_STORE_ADDR_HIGH     = 0x00002007,  //no init
@@ -253,8 +253,8 @@ static NTSTATUS VmxSetupVMCS (
   //VM_EXIT_MSR_LOAD_ADDR_HIGH      = 0x00002009,  //no init
   //VM_ENTRY_MSR_LOAD_ADDR          = 0x0000200a,  //no init
   //VM_ENTRY_MSR_LOAD_ADDR_HIGH     = 0x0000200b,  //no init
-  __vmx_vmwrite (TSC_OFFSET,      0);
-  __vmx_vmwrite (TSC_OFFSET_HIGH, 0);
+//   __vmx_vmwrite (TSC_OFFSET,      0);
+//   __vmx_vmwrite (TSC_OFFSET_HIGH, 0);
   //VIRTUAL_APIC_PAGE_ADDR          = 0x00002012,   //no init
   //VIRTUAL_APIC_PAGE_ADDR_HIGH     = 0x00002013,   //no init
 
@@ -262,8 +262,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (VMCS_LINK_POINTER,      0xffffffff);
   __vmx_vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
 
-  __vmx_vmwrite (GUEST_IA32_DEBUGCTL,      __readmsr (MSR_IA32_DEBUGCTL) & 0xffffffff);
-  __vmx_vmwrite (GUEST_IA32_DEBUGCTL_HIGH, __readmsr (MSR_IA32_DEBUGCTL) >> 32);
+//   __vmx_vmwrite (GUEST_IA32_DEBUGCTL,      __readmsr (MSR_IA32_DEBUGCTL) & 0xffffffff);
+//   __vmx_vmwrite (GUEST_IA32_DEBUGCTL_HIGH, __readmsr (MSR_IA32_DEBUGCTL) >> 32);
 
   /*32BIT Control Fields. */  //disable Vmexit by Extern-interrupt,NMI and Virtual NMI
   __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
@@ -295,9 +295,12 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
 #endif
 
-  __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MASK,  0);
-  __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MATCH, 0);
-  __vmx_vmwrite (CR3_TARGET_COUNT,            0);
+  // 处理#PF异常时用
+//   __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MASK,  0);
+//   __vmx_vmwrite (PAGE_FAULT_ERROR_CODE_MATCH, 0);
+
+  // primary processor_based Control : CR3-load exiting
+  // __vmx_vmwrite (CR3_TARGET_COUNT,        0);
 
   __vmx_vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
   __vmx_vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
@@ -316,8 +319,8 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
   __vmx_vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
 
-  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
-  __vmx_vmwrite (GUEST_ACTIVITY_STATE,        0);   //Active state          
+  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_STATE, 0);   // 指示当前有STI阻塞状态
+  __vmx_vmwrite (GUEST_ACTIVITY_STATE,         0);   // 处于正常执行指令状态         
   //GUEST_SM_BASE          = 0x98000,   //no init
 
   __vmx_vmwrite (GUEST_SYSENTER_CS,     __readmsr (MSR_IA32_SYSENTER_CS));
@@ -327,16 +330,17 @@ static NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (HOST_IA32_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));     //no use
 
   /* NATURAL Control State Fields:need not setup. */
-  __vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
+  //__vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
   __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  //
+  //__vmx_vmwrite (CR0_READ_SHADOW, X86_CR0_PG);
+  __vmx_vmwrite (CR4_READ_SHADOW, 0);
 
-  __vmx_vmwrite (CR0_READ_SHADOW, (__readcr4 () & X86_CR0_PG) | X86_CR0_PG);
-
-  __vmx_vmwrite (CR4_READ_SHADOW,   0);
-  __vmx_vmwrite (CR3_TARGET_VALUE0, 0);      //no use
-  __vmx_vmwrite (CR3_TARGET_VALUE1, 0);      //no use                        
-  __vmx_vmwrite (CR3_TARGET_VALUE2, 0);      //no use
-  __vmx_vmwrite (CR3_TARGET_VALUE3, 0);      //no use
+  // primary processor_based Control : CR3-load exiting
+//   __vmx_vmwrite (CR3_TARGET_VALUE0, 0);      //no use
+//   __vmx_vmwrite (CR3_TARGET_VALUE1, 0);      //no use                        
+//   __vmx_vmwrite (CR3_TARGET_VALUE2, 0);      //no use
+//   __vmx_vmwrite (CR3_TARGET_VALUE3, 0);      //no use
 
   /* NATURAL Read-only State Fields:need not setup. */
 
@@ -441,6 +445,20 @@ NTSTATUS NTAPI VmxInitialize (
   ULONG64 VaDelta;
   PHYSICAL_ADDRESS t;
 
+  // 检查IA32_FEATURE_CONTROL寄存器的Lock位
+  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
+  {
+      KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[0] = 0!\n"));
+      return STATUS_UNSUCCESSFUL;
+  }
+
+  // 检查IA32_FEATURE_CONTROL寄存器的Enable VMX outside SMX位
+  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_VMXON_ENABLED))
+  {
+      KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[2] = 0!\n"));
+      return STATUS_UNSUCCESSFUL;
+  }
+
 #ifdef _X86_
   g_HostStackBaseAddress = (ULONG64)MmAllocateContiguousPages (1, NULL);
 #endif
@@ -518,19 +536,6 @@ NTSTATUS NTAPI VmxInitialize (
 
   _KdPrint (("VmxInitialize(): MSRBitmap VA: 0x%p\n", Cpu->Vmx.MSRBitmap));
   _KdPrint (("VmxInitialize(): MSRBitmap PA: 0x%llx\n", Cpu->Vmx.MSRBitmapPA.QuadPart));
-
-  // ===========检查IA32_FEATURE_CONTROL寄存器的两个Lock位===============
-  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
-  {
-      KdPrint(("VmxEnable() IA32_FEATURE_CONTROL bit[0] = 0!\n"));
-      return STATUS_UNSUCCESSFUL;
-  }
-
-  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_VMXON_ENABLED))
-  {
-      KdPrint(("VmxEnable() IA32_FEATURE_CONTROL bit[2] = 0!\n"));
-      return STATUS_UNSUCCESSFUL;
-  }
 
   set_in_cr4 (X86_CR4_VMXE);
   *(ULONG64 *) Cpu->Vmx.OriginaVmxonR = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id

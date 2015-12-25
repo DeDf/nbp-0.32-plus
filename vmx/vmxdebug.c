@@ -177,7 +177,7 @@ VOID NTAPI VmxDumpVmcs (
   _KdPrint (("GUEST_LDTR_AR_BYTES 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = GUEST_TR_AR_BYTES;
   _KdPrint (("GUEST_TR_AR_BYTES 0x%X: 0x%llx\n", addr, VmxRead (addr)));
-  addr = GUEST_INTERRUPTIBILITY_INFO;
+  addr = GUEST_INTERRUPTIBILITY_STATE;
   _KdPrint (("GUEST_INTERRUPTIBILITY_INFO 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = GUEST_ACTIVITY_STATE;
   _KdPrint (("GUEST_ACTIVITY_STATE 0x%X: 0x%llx\n", addr, VmxRead (addr)));

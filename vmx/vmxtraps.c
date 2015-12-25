@@ -484,10 +484,10 @@ static BOOLEAN NTAPI VmxDispatchException (
 //# if DEBUG_LEVEL>2
   _KdPrint (("VmxDispatchException(): DB intercepted, RIP: 0x%p, INTR_INFO 0x%p, flags 0x%p, II 0x%p, PD 0x%p\n",
              VmxRead (GUEST_RIP), VmxRead (VM_EXIT_INTR_INFO), VmxRead (GUEST_RFLAGS),
-             VmxRead (GUEST_INTERRUPTIBILITY_INFO), VmxRead (GUEST_PENDING_DBG_EXCEPTIONS)));
+             VmxRead (GUEST_INTERRUPTIBILITY_STATE), VmxRead (GUEST_PENDING_DBG_EXCEPTIONS)));
 //# endif
 
-  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_INFO, 0);
+  __vmx_vmwrite (GUEST_INTERRUPTIBILITY_STATE, 0);
   // FIXME: why is this commented?
 //      if (RegGetDr6() & 0x40) {
 

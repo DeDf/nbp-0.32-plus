@@ -4,19 +4,13 @@
 
 #include "newbp.h"
 
-extern BOOLEAN g_bDisableComOutput;
-
 NTSTATUS
 DriverUnload (
   PDRIVER_OBJECT DriverObject
 )
 {
-  g_bDisableComOutput = TRUE;
-
   if ( HvmSpitOutBluepill () )
-  {
     KdPrint (("NEWBLUEPILL: HvmSpitOutBluepill() failed!\n"));
-  }
 
 // #ifdef USE_LOCAL_DBGPRINTS
 //   DbgUnregisterWindow ();
