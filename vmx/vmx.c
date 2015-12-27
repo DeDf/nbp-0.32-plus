@@ -327,7 +327,7 @@ static NTSTATUS VmxSetupVMCS (
 
   /*32BIT Host-Statel Fields. */
 
-  __vmx_vmwrite (HOST_IA32_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));     //no use
+  __vmx_vmwrite (HOST_IA32_SYSENTER_CS, __readmsr (MSR_IA32_SYSENTER_CS));
 
   /* NATURAL Control State Fields:need not setup. */
   //__vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);
@@ -534,7 +534,7 @@ NTSTATUS NTAPI VmxInitialize (
   }
   RtlZeroMemory (Cpu->Vmx.MSRBitmap, PAGE_SIZE);   // MSR位图初始化为0
 
-  _KdPrint (("VmxInitialize(): MSRBitmap VA: 0x%p\n", Cpu->Vmx.MSRBitmap));
+  _KdPrint (("VmxInitialize(): MSRBitmap VA: 0x%p\n",   Cpu->Vmx.MSRBitmap));
   _KdPrint (("VmxInitialize(): MSRBitmap PA: 0x%llx\n", Cpu->Vmx.MSRBitmapPA.QuadPart));
 
   set_in_cr4 (X86_CR4_VMXE);
@@ -560,10 +560,9 @@ NTSTATUS NTAPI VmxInitialize (
   // 读取MSR_EFE/CR0/CR3/CR4等寄存器的内容并记录到CPU结构
   //
   Cpu->Vmx.GuestEFER = __readmsr (MSR_EFER);
-  KdPrint (("Guest MSR_EFER Read 0x%llx \n", Cpu->Vmx.GuestEFER));
-  Cpu->Vmx.GuestCR0 = __readcr0 ();
-  Cpu->Vmx.GuestCR3 = __readcr3 ();
-  Cpu->Vmx.GuestCR4 = __readcr4 ();
+  Cpu->Vmx.GuestCR0  = __readcr0 ();
+  Cpu->Vmx.GuestCR3  = __readcr3 ();
+  Cpu->Vmx.GuestCR4  = __readcr4 ();
 
 #ifdef INTERCEPT_RDTSCs
   Cpu->Tracing = 0;
