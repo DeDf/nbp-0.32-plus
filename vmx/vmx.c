@@ -24,6 +24,12 @@ ULONG64 g_HostStackBaseAddress;
 
 extern ULONG g_uSubvertedCPUs;
 
+UCHAR vmwrite(size_t CtlCode, size_t Value)
+{
+    KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
+    return __vmx_vmwrite(CtlCode, Value);
+}
+
 NTSTATUS NTAPI VmxDisable (
 )
 {
@@ -184,13 +190,13 @@ NTSTATUS NTAPI VmxFillGuestSelectorData (
   if (!Selector)
     uAccessRights |= 0x10000;
 
-  __vmx_vmwrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
-  __vmx_vmwrite (GUEST_ES_LIMIT    + Segreg * 2, SegmentSelector.limit);
-  __vmx_vmwrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
+  vmwrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
+  vmwrite (GUEST_ES_LIMIT    + Segreg * 2, SegmentSelector.limit);
+  vmwrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
 
   if ((Segreg == LDTR) || (Segreg == TR))
     // don't setup for FS/GS - their bases are stored in MSR values
-    __vmx_vmwrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
+    vmwrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
 
   return STATUS_SUCCESS;
 }
@@ -214,56 +220,56 @@ static NTSTATUS VmxSetupVMCS (
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
-  __vmx_vmwrite (VMCS_LINK_POINTER,      0xffffffff);
-  __vmx_vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
+  vmwrite (VMCS_LINK_POINTER,      0xffffffff);
+  vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
 
   /*32BIT Control Fields. */  //disable Vmexit by Extern-interrupt,NMI and Virtual NMI
-  __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
-  __vmx_vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
-  __vmx_vmwrite (EXCEPTION_BITMAP, 0);
-  __vmx_vmwrite (VM_EXIT_CONTROLS,
+  vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
+  vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
+  vmwrite (EXCEPTION_BITMAP, 0);
+  vmwrite (VM_EXIT_CONTROLS,
             VmxAdjustControls (VM_EXIT_IA32E_MODE | VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
-  __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
+  vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
 
-  __vmx_vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
-  __vmx_vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
-  __vmx_vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
-  __vmx_vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
-  __vmx_vmwrite (GUEST_ACTIVITY_STATE,    0);   // 处于正常执行指令状态         
+  vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
+  vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
+  vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
+  vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
+  vmwrite (GUEST_ACTIVITY_STATE,    0);   // 处于正常执行指令状态         
   
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
   // SetCRx()
-  __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
-  __vmx_vmwrite (CR4_READ_SHADOW, 0);
+  vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  vmwrite (CR4_READ_SHADOW, 0);
   //
-  __vmx_vmwrite (GUEST_CR0, __readcr0 ());
-  __vmx_vmwrite (GUEST_CR3, __readcr3 ());
-  __vmx_vmwrite (GUEST_CR4, __readcr4 ());
-  __vmx_vmwrite (GUEST_DR7, 0x400);
+  vmwrite (GUEST_CR0, __readcr0 ());
+  vmwrite (GUEST_CR3, __readcr3 ());
+  vmwrite (GUEST_CR4, __readcr4 ());
+  vmwrite (GUEST_DR7, 0x400);
   //
-  __vmx_vmwrite (HOST_CR0, __readcr0 ());
-  __vmx_vmwrite (HOST_CR3, __readcr3 ());
-  __vmx_vmwrite (HOST_CR4, __readcr4 ());
+  vmwrite (HOST_CR0, __readcr0 ());
+  vmwrite (HOST_CR3, __readcr3 ());
+  vmwrite (HOST_CR4, __readcr4 ());
 
   // SetDT()
-  __vmx_vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
-  __vmx_vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
+  vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
+  vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
   GdtBase = (PVOID) GetGdtBase ();
-  __vmx_vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
-  __vmx_vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
+  vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
+  vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
   //
-  __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) GdtBase);
-  __vmx_vmwrite (HOST_IDTR_BASE, (ULONG64) GetIdtBase ());
+  vmwrite (HOST_GDTR_BASE, (ULONG64) GdtBase);
+  vmwrite (HOST_IDTR_BASE, (ULONG64) GetIdtBase ());
 
   // SetSysCall()
-  __vmx_vmwrite (GUEST_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  __vmx_vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
+  vmwrite (GUEST_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
+  vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
   //
-  __vmx_vmwrite (HOST_IA32_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
+  vmwrite (HOST_IA32_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
+  vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
 
   // SetSegSelectors()
   VmxFillGuestSelectorData (GdtBase, ES, RegGetEs ());
@@ -275,34 +281,34 @@ static NTSTATUS VmxSetupVMCS (
   VmxFillGuestSelectorData (GdtBase, LDTR, GetLdtr ());
   VmxFillGuestSelectorData (GdtBase, TR, GetTrSelector ());
   //
-  __vmx_vmwrite (GUEST_ES_BASE, 0);
-  __vmx_vmwrite (GUEST_CS_BASE, 0);
-  __vmx_vmwrite (GUEST_SS_BASE, 0);
-  __vmx_vmwrite (GUEST_DS_BASE, 0);
-  __vmx_vmwrite (GUEST_FS_BASE, __readmsr (MSR_FS_BASE));
-  __vmx_vmwrite (GUEST_GS_BASE, __readmsr (MSR_GS_BASE));
+  vmwrite (GUEST_ES_BASE, 0);
+  vmwrite (GUEST_CS_BASE, 0);
+  vmwrite (GUEST_SS_BASE, 0);
+  vmwrite (GUEST_DS_BASE, 0);
+  vmwrite (GUEST_FS_BASE, __readmsr (MSR_FS_BASE));
+  vmwrite (GUEST_GS_BASE, __readmsr (MSR_GS_BASE));
   //
-  __vmx_vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
-  __vmx_vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
-  __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
-  __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
-  __vmx_vmwrite (HOST_FS_SELECTOR, RegGetFs () & 0xf8);
-  __vmx_vmwrite (HOST_GS_SELECTOR, RegGetGs () & 0xf8);
-  __vmx_vmwrite (HOST_TR_SELECTOR, GetTrSelector () & 0xf8);
+  vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
+  vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
+  vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
+  vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
+  vmwrite (HOST_FS_SELECTOR, RegGetFs () & 0xf8);
+  vmwrite (HOST_GS_SELECTOR, RegGetGs () & 0xf8);
+  vmwrite (HOST_TR_SELECTOR, GetTrSelector () & 0xf8);
   //
-  __vmx_vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
-  __vmx_vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
+  vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
+  vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
   CmInitializeSegmentSelector (&SegmentSelector, GetTrSelector (), GdtBase);
-  __vmx_vmwrite (HOST_TR_BASE, SegmentSelector.base);
+  vmwrite (HOST_TR_BASE, SegmentSelector.base);
 
   /////////////////////////////////////////////////////////////////////////////
-  __vmx_vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
-  __vmx_vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
-  __vmx_vmwrite (GUEST_RFLAGS, RegGetRflags ());
+  vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
+  vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
+  vmwrite (GUEST_RFLAGS, RegGetRflags ());
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
-  __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
-  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
+  vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
+  vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
 
   _KdPrint (("VmxSetupVMCS(): Exit\n"));
 
