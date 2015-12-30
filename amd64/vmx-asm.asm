@@ -200,24 +200,20 @@ VmxResume PROC
 	ret
 VmxResume ENDP
 
-;=== HvmEventCallback(PCPU Cpu,PGUEST_REGS GuestRegs,ULONG64 Ticks1) ===
+;====== VmxVmexitHandler ======
 
-VmxVmexitHandler PROC   
+VmxVmexitHandler PROC
 
 	HVM_SAVE_ALL_NOSEGREGS
 	
 	mov     rcx, [rsp + 80h] ;PCPU
 	mov 	rdx, rsp		 ;GuestRegs
-	mov 	r8, 0		     ;TSC
 	
 	sub	rsp, 28h
-
-	;rdtsc
-	
 	call	VmExitHandler
 	add	rsp, 28h
 	
-	HVM_RESTORE_ALL_NOSEGREGS	
+	HVM_RESTORE_ALL_NOSEGREGS
 	vmx_resume
 	ret
 

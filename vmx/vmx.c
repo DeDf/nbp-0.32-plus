@@ -26,7 +26,7 @@ extern ULONG g_uSubvertedCPUs;
 
 UCHAR vmwrite(size_t CtlCode, size_t Value)
 {
-    KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
+    //KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
     return __vmx_vmwrite(CtlCode, Value);
 }
 
@@ -95,27 +95,58 @@ VOID VmxHandleInterception (
   BOOLEAN WillBeAlsoHandledByGuestHv
 )
 {
-  NTSTATUS Status;
-  ULONG64 Exitcode;
-  PNBP_TRAP Trap;
+    ULONG64 ExitReason;
+    ULONG_PTR GuestEIP;
+    ULONG_PTR inst_len;
 
-  if (!Cpu || !GuestRegs)
-    return;
+    if (!Cpu || !GuestRegs)
+        return;
 
-  Exitcode = VmxRead (VM_EXIT_REASON);
+    __vmx_vmread(VM_EXIT_REASON, &ExitReason);
+    //
+    __vmx_vmread(GUEST_RIP, &GuestEIP);
+    __vmx_vmread(VM_EXIT_INSTRUCTION_LEN, &inst_len);
+    __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
 
-  // search for a registered trap for this interception
-  Status = TrFindRegisteredTrap (Cpu, GuestRegs, Exitcode, &Trap);
-  if (!NT_SUCCESS (Status))
-  {
-    KdPrint (("VmxHandleInterception(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", Exitcode));
-    Hvm->ArchShutdown (Cpu, GuestRegs);
-    return;
-  }
+    if (ExitReason == EXIT_REASON_CPUID)
+    {
+        ULONG32 fn, eax, ebx, ecx, edx;
 
-  Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv);
-  if (!NT_SUCCESS (Status))
-    KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
+        fn = (ULONG32) GuestRegs->rax;
+#ifdef BP_KNOCK
+        if (fn == BP_KNOCK_EAX)
+        {
+            KdPrint (("Magic knock received: %x\n", BP_KNOCK_EAX));
+            GuestRegs->rax = 0x68686868;
+            return;
+        }
+#endif
+
+        ecx = (ULONG32) GuestRegs->rcx;
+        GetCpuIdInfo (fn, &eax, &ebx, &ecx, &edx);
+        GuestRegs->rax = eax;
+        GuestRegs->rbx = ebx;
+        GuestRegs->rcx = ecx;
+        GuestRegs->rdx = edx;
+        return;
+    }
+    else
+    {
+        NTSTATUS Status;
+        PNBP_TRAP Trap;
+
+        Status = TrFindRegisteredTrap (Cpu, GuestRegs, ExitReason, &Trap);
+        if (!NT_SUCCESS (Status))
+        {
+            KdPrint (("VmxHandleInterception(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", ExitReason));
+            Hvm->ArchShutdown (Cpu, GuestRegs);
+            return;
+        }
+
+        Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv);
+        if (!NT_SUCCESS (Status))
+            KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
+    }
 }
 
 VOID NTAPI VmxDispatchEvent (
@@ -303,7 +334,7 @@ static NTSTATUS VmxSetupVMCS (
 
   /////////////////////////////////////////////////////////////////////////////
   vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
-  vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip:CmSlipIntoMatrix
+  vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip : common-asm CmResumeGuest
   vmwrite (GUEST_RFLAGS, RegGetRflags ());
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
@@ -350,12 +381,9 @@ NTSTATUS NTAPI VmxInitialize (
   Cpu->Vmx.OriginaVmxonR = MmAllocateContiguousPages (VMX_VMXONR_SIZE_IN_PAGES, &Cpu->Vmx.OriginalVmxonRPA);
   if (!Cpu->Vmx.OriginaVmxonR)
   {
-    _KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
+    KdPrint (("VmxInitialize(): Failed to allocate memory for original VMXON\n"));
     return STATUS_INSUFFICIENT_RESOURCES;
   }
-
-  _KdPrint (("VmxInitialize(): OriginaVmxonR VA: 0x%p\n",   Cpu->Vmx.OriginaVmxonR));
-  _KdPrint (("VmxInitialize(): OriginaVmxonR PA: 0x%llx\n", Cpu->Vmx.OriginalVmxonRPA.QuadPart));
 
   //
   // 为VMCS结构分配空间 (Allocate VMCS)
@@ -363,12 +391,9 @@ NTSTATUS NTAPI VmxInitialize (
   Cpu->Vmx.OriginalVmcs = MmAllocateContiguousPages (VMX_VMCS_SIZE_IN_PAGES, &Cpu->Vmx.OriginalVmcsPA);
   if (!Cpu->Vmx.OriginalVmcs)
   {
-    _KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
+    KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
     return STATUS_INSUFFICIENT_RESOURCES;
   }
-
-  _KdPrint (("VmxInitialize(): Vmcs VA: 0x%p\n",   Cpu->Vmx.OriginalVmcs));
-  _KdPrint (("VmxInitialize(): Vmcs PA: 0x%llx\n", Cpu->Vmx.OriginalVmcsPA.QuadPart));
 
   //
   // TODISCOVER:

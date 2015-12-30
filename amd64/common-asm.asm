@@ -1,6 +1,4 @@
 EXTERN	HvmSubvertCpu:PROC
-EXTERN	HvmResumeGuest:PROC
-
 
 .CODE
 
@@ -148,17 +146,13 @@ CmSubvert PROC
 
 	sub	rsp, 28h
 
-	mov	rcx, rsp
-	
-	;x64统一为__fastcall: 前四个整型或指针类型参数由RCX,RDX,R8,R9依次传递
-	;VmxSubvertCpu要求一个参数GuestRsp，即用rcx传递
-	call	HvmSubvertCpu
+	mov	rcx, rsp           ; __fastcall用rcx传递第一个参数GuestRsp
+	                       ; x64统一为__fastcall: 前四个参数由RCX,RDX,R8,R9依次传递
+	call	HvmSubvertCpu  ; VmxSubvertCpu要求一个参数GuestRsp
 
 CmSubvert ENDP
 
 CmResumeGuest PROC
-
-	call	HvmResumeGuest
 
 	add	rsp, 28h
 

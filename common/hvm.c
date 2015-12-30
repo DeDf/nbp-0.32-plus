@@ -15,17 +15,6 @@ extern BOOLEAN g_bDisableComOutput;
 
 PHVM_DEPENDENT Hvm;
 
-NTSTATUS NTAPI HvmResumeGuest (
-)
-{
-  _KdPrint (("HvmResumeGuest(): Processor #%d, irql %d in GUEST\n",
-             KeGetCurrentProcessorNumber (), KeGetCurrentIrql ()));
-
-  // irql will be lowered in the CmDeliverToProcessor()
-  //CmSti();
-  return STATUS_SUCCESS;
-}
-
 VOID NTAPI VmExitHandler (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
@@ -34,21 +23,7 @@ VOID NTAPI VmExitHandler (
     if (!Cpu || !GuestRegs)
         return;
 
-     __vmx_vmread (GUEST_RSP, &GuestRegs->rsp);
-
-    if (Hvm->ArchIsNestedEvent (Cpu, GuestRegs))
-    {
-        // it's an event of a nested guest
-        Hvm->ArchDispatchNestedEvent (Cpu, GuestRegs);
-
-        __vmx_vmwrite (GUEST_RSP, GuestRegs->rsp);
-
-        return;
-    }
-
     VmxHandleInterception (Cpu, GuestRegs, FALSE);
-
-    __vmx_vmwrite (GUEST_RSP, GuestRegs->rsp);
 }
 
 static NTSTATUS HvmSetupGdt (
@@ -222,9 +197,7 @@ NTSTATUS NTAPI HvmSubvertCpu (
 
   //
   // 准备VM要用到的数据结构 (VMON Region & VMCS for Intel-Vt)
-  // static NTSTATUS NTAPI VmxInitialize (PCPU Cpu, PVOID GuestRip, PVOID GuestRsp)
   // GuestRip和GuestRsp会被填进VMCS结构，代表Guest原本的代码位置和栈顶指针
-  // CmSlipIntoMatrix即HvmResumeGuest
   //
   Status = VmxInitialize (Cpu, CmResumeGuest, GuestRsp);
   if (!NT_SUCCESS (Status))
@@ -236,7 +209,7 @@ NTSTATUS NTAPI HvmSubvertCpu (
   InterlockedIncrement (&g_uSubvertedCPUs);  // 已侵染的CPU数+=1
 
 #if 0
-  Cpu->LapicBaseMsr.QuadPart = MsrRead (MSR_IA32_APICBASE);
+  Cpu->LapicBaseMsr.QuadPart = __readmsr (MSR_IA32_APICBASE);
 
   if (Cpu->LapicBaseMsr.QuadPart & MSR_IA32_APICBASE_ENABLE)
   {
@@ -255,8 +228,8 @@ NTSTATUS NTAPI HvmSubvertCpu (
   }
 #endif
 
-  HvmSetupGdt (Cpu);   // 配置Guest Gdt
-  HvmSetupIdt (Cpu);   // 配置Guest Idt
+  //HvmSetupGdt (Cpu);   // 配置Guest Gdt
+  //HvmSetupIdt (Cpu);   // 配置Guest Idt
 
   // 一切准备工作完毕，使该CPU进入虚拟机
   __vmx_vmlaunch();

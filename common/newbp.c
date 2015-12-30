@@ -10,7 +10,7 @@ DriverUnload (
 )
 {
   if ( HvmSpitOutBluepill () )
-    KdPrint (("NEWBLUEPILL: HvmSpitOutBluepill() failed!\n"));
+    KdPrint (("[NEWBLUEPILL] HvmSpitOutBluepill() failed!\n"));
 
 // #ifdef USE_LOCAL_DBGPRINTS
 //   DbgUnregisterWindow ();
