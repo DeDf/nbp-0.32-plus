@@ -407,8 +407,7 @@ VOID NTAPI VmxDumpShadowVmcs (
   PULONG64 PShadowVmcs
 );
 
-VOID NTAPI VmxDumpVmcs (
-);
+VOID VmxDumpVmcs ();
 
 BOOLEAN NTAPI VmxIsImplemented ();
 
