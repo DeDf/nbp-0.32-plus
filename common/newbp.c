@@ -4,76 +4,46 @@
 
 #include "newbp.h"
 
-NTSTATUS
+VOID
 DriverUnload (
-  PDRIVER_OBJECT DriverObject
+    PDRIVER_OBJECT DriverObject
 )
 {
-  if ( HvmSpitOutBluepill () )
-    KdPrint (("[NEWBLUEPILL] HvmSpitOutBluepill() failed!\n"));
-
-// #ifdef USE_LOCAL_DBGPRINTS
-//   DbgUnregisterWindow ();
-// #endif
-
-  KdPrint (("[NEWBLUEPILL] Unloading finished~\n"));
-  return STATUS_SUCCESS;
+    if ( HvmSpitOutBluepill () )             // 吐出药丸子
+        KdPrint (("[NEWBLUEPILL] HvmSpitOutBluepill() failed!\n"));
+    else
+        KdPrint (("[NEWBLUEPILL] Unloading finished~\n"));
 }
 
 NTSTATUS
 DriverEntry (
-  PDRIVER_OBJECT DriverObject,
-  PUNICODE_STRING RegistryPath
+    PDRIVER_OBJECT DriverObject,
+    PUNICODE_STRING RegistryPath
 )
 {
-  NTSTATUS status;
+    NTSTATUS status;
 
-#ifdef USE_COM_PRINTS
-  PioInit ((PUCHAR) COM_PORT_ADDRESS);
-#endif
-  ComInit ();
+    KdPrint (("\n[NEWBLUEPILL] DriverEntry~\n"));
 
-  //
-  // 是否使用调试输出
-  //
-// #ifdef USE_LOCAL_DBGPRINTS
-//   status = DbgRegisterWindow (g_BpId);
-//   if (status)
-//   {
-//     _KdPrint (("NEWBLUEPILL: DbgRegisterWindow() failed with status 0x%08hX\n", status));
-//     return status;
-//   }
-// #endif
+    if (VmxIsImplemented ())
+    {
+        Hvm = &Vmx;
+    }
+    else
+    {
+        KdPrint (("DriverEntry(): VMX is not supported!\n"));
+        return STATUS_NOT_SUPPORTED;
+    }
 
-  KdPrint (("\n[NEWBLUEPILL] DriverEntry~\n"));
+    status = HvmSwallowBluepill ();          // 吞下药丸子
+    if (status)
+    {
+        KdPrint (("[NEWBLUEPILL] HvmSwallowBluepill() failed with status 0x%08X\n", status));
+        return status;
+    }
 
-  if (VmxIsImplemented ())
-  {
-      Hvm = &Vmx;
-      KeInitializeMutex (&g_HvmMutex, 0);  // 初始化全局互斥体g_HvmMutex, 设置其状态为受信
-  }
-  else
-  {
-      KdPrint (("DriverEntry(): VMX is not supported!\n"));
-      return STATUS_NOT_SUPPORTED;
-  }
+    DriverObject->DriverUnload = DriverUnload;
 
-  //
-  // 吞下BluePill，开启VMM模式, 失败则撤销更改
-  //
-  status = HvmSwallowBluepill ();
-  if (status)
-  {
-    KdPrint (("NEWBLUEPILL: HvmSwallowBluepill() failed with status 0x%08hX\n", status));
-// #ifdef USE_LOCAL_DBGPRINTS
-//     DbgUnregisterWindow ();
-// #endif
-    return status;
-  }
-
-  DriverObject->DriverUnload = DriverUnload;
-
-  KdPrint (("NEWBLUEPILL: Initialization finished~\n"));
-
-  return STATUS_SUCCESS;
+    KdPrint (("[NEWBLUEPILL] Initialization finished~\n"));
+    return STATUS_SUCCESS;
 }
