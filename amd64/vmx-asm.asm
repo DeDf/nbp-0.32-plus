@@ -200,9 +200,9 @@ VmxResume PROC
 	ret
 VmxResume ENDP
 
-;====== VmxVmexitHandler ======
+;====== VmxVMexitHandler ======
 
-VmxVmexitHandler PROC
+VmxVMexitHandler PROC
 
 	HVM_SAVE_ALL_NOSEGREGS
 	
@@ -217,6 +217,6 @@ VmxVmexitHandler PROC
 	vmx_resume
 	ret
 
-VmxVmexitHandler ENDP
+VmxVMexitHandler ENDP
 
 END

@@ -37,8 +37,6 @@
 
 #define	ARCH_VMX	2
 
-extern KMUTEX g_HvmMutex;
-
 typedef struct _CPU
 {
   PCPU SelfPointer;             // MUST go first in the structure; refer to interrupt handlers for details
@@ -92,11 +90,6 @@ extern HVM_DEPENDENT Vmx;
 NTSTATUS NTAPI HvmSwallowBluepill ();
 
 NTSTATUS NTAPI HvmSpitOutBluepill ();
-
-VOID NTAPI VmExitHandler (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
 
 VOID NTAPI HvmSetupTimeBomb (
   PVOID OriginalTrampoline,

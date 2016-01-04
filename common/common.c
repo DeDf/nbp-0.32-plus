@@ -1,15 +1,5 @@
 /* 
  * Copyright holder: Invisible Things Lab
- * 
- * This software is protected by domestic and International
- * copyright laws. Any use (including publishing and
- * distribution) of this software requires a valid license
- * from the copyright holder.
- *
- * This software is provided for the educational use only
- * during the Black Hat training. This software should not
- * be used on production systems.
- *
  */
 
 #include "common.h"
@@ -332,38 +322,6 @@ VOID NTAPI CmFreePhysPages (
 )
 {
   // memory manager collects all used memory
-}
-
-NTSTATUS NTAPI CmDeliverToProcessor (
-  CCHAR cProcessorNumber,
-  PCALLBACK_PROC CallbackProc,
-  PVOID CallbackParam,
-  PNTSTATUS pCallbackStatus
-)
-{
-  NTSTATUS CallbackStatus;
-  KIRQL OldIrql;
-
-  if (!CallbackProc)
-    return STATUS_INVALID_PARAMETER;
-
-  if (pCallbackStatus)
-    *pCallbackStatus = STATUS_UNSUCCESSFUL;
-
-  KeSetSystemAffinityThread ((KAFFINITY) (1 << cProcessorNumber));
-
-  OldIrql = KeRaiseIrqlToDpcLevel ();
-  CallbackStatus = CallbackProc (CallbackParam);
-
-  KeLowerIrql (OldIrql);
-
-  KeRevertToUserAffinityThread ();
-
-  // save the status of the callback which has run on the current core
-  if (pCallbackStatus)
-    *pCallbackStatus = CallbackStatus;
-
-  return STATUS_SUCCESS;
 }
 
 NTSTATUS NTAPI CmInitializeSegmentSelector (

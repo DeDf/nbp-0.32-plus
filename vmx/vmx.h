@@ -399,7 +399,7 @@ VOID NTAPI VmxTurnOn (
 
 VOID NTAPI VmxResume ();
 
-VOID NTAPI VmxVmexitHandler (
+VOID VmxVMexitHandler (
   VOID
 );
 
@@ -416,11 +416,6 @@ NTSTATUS NTAPI VmxSetupGeneralInterceptions (
 );
 
 static BOOLEAN NTAPI VmxIsNestedEvent (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
-
-VOID NTAPI VmxDispatchEvent (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 );
@@ -470,9 +465,3 @@ VOID DumpMemory (
   PUCHAR Addr,
   ULONG64 Len
 );
-
-VOID VmxHandleInterception (
-                            PCPU Cpu,
-                            PGUEST_REGS GuestRegs,
-                            BOOLEAN WillBeAlsoHandledByGuestHv
-                            );

@@ -14,7 +14,7 @@ HVM_DEPENDENT Vmx = {
   VmxShutdown,
   VmxIsNestedEvent,
   VmxDispatchNestedEvent,
-  VmxDispatchEvent,
+  NULL,
   VmxAdjustRip,
   VmxRegisterTraps,
   VmxIsTrapVaild
@@ -89,15 +89,16 @@ BOOLEAN NTAPI VmxIsImplemented ()
   return (BOOLEAN) (CmIsBitSet (ecx, 5));
 }
 
-VOID VmxHandleInterception (
+VOID
+VmExitHandler (
   PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  BOOLEAN WillBeAlsoHandledByGuestHv
+  PGUEST_REGS GuestRegs
 )
 {
     ULONG64 ExitReason;
     ULONG_PTR GuestEIP;
     ULONG_PTR inst_len;
+    BOOLEAN WillBeAlsoHandledByGuestHv = FALSE;
 
     if (!Cpu || !GuestRegs)
         return;
@@ -147,15 +148,6 @@ VOID VmxHandleInterception (
         if (!NT_SUCCESS (Status))
             KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
     }
-}
-
-VOID NTAPI VmxDispatchEvent (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-)
-{
-  VmxHandleInterception (Cpu, GuestRegs, FALSE);
-                         /* this intercept will not be handled by guest hv */
 }
 
 static VOID NTAPI VmxDispatchNestedEvent (
@@ -232,7 +224,7 @@ NTSTATUS NTAPI VmxFillGuestSelectorData (
   return STATUS_SUCCESS;
 }
 
-static NTSTATUS VmxSetupVMCS (
+NTSTATUS VmxSetupVMCS (
   PCPU Cpu,
   PVOID GuestRip,
   PVOID GuestRsp
@@ -339,12 +331,19 @@ static NTSTATUS VmxSetupVMCS (
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
   vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
-  vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
+  vmwrite (HOST_RIP, (ULONG64) VmxVMexitHandler);
 
   _KdPrint (("VmxSetupVMCS(): Exit\n"));
 
   return STATUS_SUCCESS;
 }
+
+// #define VmxWrite __vmx_vmwrite
+// #define MsrRead  __readmsr
+// #define RegGetCr0 __readcr0
+// #define RegGetCr3 __readcr3
+// #define RegGetCr4 __readcr4
+// #define GUEST_INTERRUPTIBILITY_INFO GUEST_INTERRUPTIBILITY_STATE
 
 NTSTATUS NTAPI VmxInitialize (
   PCPU Cpu,

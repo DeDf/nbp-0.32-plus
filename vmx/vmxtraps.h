@@ -9,6 +9,6 @@
 #include "traps.h"
 #include "hypercalls.h"
 
-NTSTATUS NTAPI VmxRegisterTraps (
+NTSTATUS VmxRegisterTraps (
   PCPU Cpu
 );

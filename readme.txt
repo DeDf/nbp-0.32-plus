@@ -19,3 +19,6 @@ vmc.c
 VmxIsImplemented()  // 检测当前的处理器是否支持Vt
 vmxtraps.c
 VmxRegisterTraps ()
+
+vmx.c
+VOID VmxHandleInterception 处理VM-Exit

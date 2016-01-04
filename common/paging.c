@@ -4,8 +4,6 @@
 
 #include "paging.h"
 
-#define DbgPrint(...) {}
-
 PVOID NTAPI MmAllocatePages (
   ULONG uNumberOfPages,
   PPHYSICAL_ADDRESS pFirstPagePA
@@ -17,7 +15,7 @@ PVOID NTAPI MmAllocatePages (
   if (!uNumberOfPages)
     return NULL;
 
-  PageVA = ExAllocatePoolWithTag (NonPagedPool, uNumberOfPages * PAGE_SIZE, ITL_TAG);
+  PageVA = ExAllocatePoolWithTag (NonPagedPool, uNumberOfPages * PAGE_SIZE, MEM_TAG);
   if (!PageVA)
     return NULL;
   RtlZeroMemory (PageVA, uNumberOfPages * PAGE_SIZE);

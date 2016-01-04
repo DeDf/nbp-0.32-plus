@@ -256,8 +256,9 @@ static VOID DumpMemory (
 )
 {
   ULONG64 i;
-  for (i = 0; i < Len; i++) {
-    _KdPrint (("0x%x 0x%x\n", Addr + i, *(Addr + i)));
+  for (i = 0; i < Len; i++)
+  {
+    KdPrint (("%p 0x%x\n", Addr + i, *(Addr + i)));
   }
 }
 

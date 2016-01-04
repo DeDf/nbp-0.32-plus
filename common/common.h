@@ -10,6 +10,8 @@
 
 // ---------------- GENERAL CONFIG (both SVM & VMX) ------------------------  
 
+#define MEM_TAG	'LTI'
+
 // DEBUG settings -------------
 #define	ENABLE_DEBUG_PRINTS
 #define	ENABLE_HYPERCALLS       // ‘ –Ì–∂‘ÿ?
@@ -532,13 +534,6 @@ NTSTATUS NTAPI CmResumeGuest (
   PVOID
 );
 
-NTSTATUS NTAPI CmDeliverToProcessor (
-  CCHAR cProcessorNumber,
-  PCALLBACK_PROC CallbackProc,
-  PVOID CallbackParam,
-  PNTSTATUS pCallbackStatus
-);
-
 NTSTATUS NTAPI CmInitializeSegmentSelector (
   SEGMENT_SELECTOR * SegmentSelector,
   USHORT Selector,
@@ -647,4 +642,4 @@ NTSTATUS NTAPI NtDeviceIoControlFile (
   IN ULONG OutputBufferLength
 );
 
-#define ITL_TAG	'LTI'
+

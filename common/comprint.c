@@ -1,15 +1,5 @@
 /* 
  * Copyright holder: Invisible Things Lab
- * 
- * This software is protected by domestic and International
- * copyright laws. Any use (including publishing and
- * distribution) of this software requires a valid license
- * from the copyright holder.
- *
- * This software is provided for the educational use only
- * during the Black Hat training. This software should not
- * be used on production systems.
- *
  */
 
 #include "comprint.h"
@@ -17,8 +7,6 @@
 static BPSPIN_LOCK g_ComSpinLock;
 static ULONG64 LastTsc = 0;     // TODO: move it to the CPU struct
 UCHAR g_BpId = 0;
-
-BOOLEAN g_bDisableComOutput = FALSE;
 
 #ifdef COMPRINT_OVERFLOW_PROTECTION
 static int QueueSize = 0;
@@ -112,11 +100,6 @@ VOID NTAPI ComPrint (
   UCHAR str[1024] = { 0 };
   int i, len, j;
   ULONG64 tsc = RegGetTSC ();
-
-#ifdef USE_COM_PRINTS
-  if (g_bDisableComOutput)
-    return;
-#endif
 
   va_start (args, fmt);
   CmAcquireSpinLock (&g_ComSpinLock);
