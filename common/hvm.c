@@ -107,6 +107,7 @@ HvmSpitOutBluepill ()
         }
 
         KeLowerIrql (OldIrql);
+        clear_in_cr4 (X86_CR4_VMXE);
         KeRevertToUserAffinityThread ();
     }
 

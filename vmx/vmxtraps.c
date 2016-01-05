@@ -58,42 +58,6 @@ static BOOLEAN NTAPI VmxDispatchHypercall (
   return TRUE;
 }
 
-static BOOLEAN NTAPI VmxDispatchCpuid (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  PNBP_TRAP Trap,
-  BOOLEAN WillBeAlsoHandledByGuestHv
-)
-{
-  ULONG32 fn, eax, ebx, ecx, edx;
-  ULONG64 inst_len;
-
-  if (!Cpu || !GuestRegs)
-    return TRUE;
-  fn = (ULONG32) GuestRegs->rax;
-
-  inst_len = VmxRead (VM_EXIT_INSTRUCTION_LEN);
-  if (Trap->General.RipDelta == 0)
-    Trap->General.RipDelta = inst_len;
-
-#ifdef BP_KNOCK
-  if (fn == BP_KNOCK_EAX)
-  {
-    KdPrint (("Magic knock received: %x\n", BP_KNOCK_EAX));
-    GuestRegs->rax = BP_KNOCK_EAX_ANSWER;
-    return TRUE;
-  }
-#endif
-
-  ecx = (ULONG32) GuestRegs->rcx;
-  GetCpuIdInfo (fn, &eax, &ebx, &ecx, &edx);
-  GuestRegs->rax = eax;
-  GuestRegs->rbx = ebx;
-  GuestRegs->rcx = ecx;
-  GuestRegs->rdx = edx;
-  return TRUE;
-}
-
 static BOOLEAN NTAPI VmxDispatchMsrRead (
   PCPU Cpu,
   PGUEST_REGS GuestRegs,
@@ -191,144 +155,6 @@ static BOOLEAN NTAPI VmxDispatchMsrWrite (
     break;
   default:
     MsrWrite (ecx, MsrValue.QuadPart);
-  }
-
-  return TRUE;
-}
-
-static VOID VmxUpdateGuestEfer (
-  PCPU Cpu
-)
-{
-  if (Cpu->Vmx.GuestEFER & EFER_LMA)
-    __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) | (VM_ENTRY_IA32E_MODE));
-  else
-    __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxRead (VM_ENTRY_CONTROLS) & (~VM_ENTRY_IA32E_MODE));
-}
-
-//TODO: this function needs to be cleaned up -- too much stuff is commented out
-static BOOLEAN NTAPI VmxDispatchCrAccess (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  PNBP_TRAP Trap,
-  BOOLEAN WillBeAlsoHandledByGuestHv
-)
-{
-  ULONG32 exit_qualification;
-  ULONG32 gp, cr;
-  ULONG64 value;
-  ULONG64 inst_len;
-
-  if (!Cpu || !GuestRegs)
-    return TRUE;
-
-#if DEBUG_LEVEL>2
-  _KdPrint (("VmxDispatchCrAccess()\n"));
-#endif
-
-  inst_len = VmxRead (VM_EXIT_INSTRUCTION_LEN);
-  if (Trap->General.RipDelta == 0)
-    Trap->General.RipDelta = inst_len;
-
-  exit_qualification = (ULONG32) VmxRead (EXIT_QUALIFICATION);
-  gp = (exit_qualification & CONTROL_REG_ACCESS_REG) >> 8;
-  cr = exit_qualification & CONTROL_REG_ACCESS_NUM;
-
-#if DEBUG_LEVEL>2
-  _KdPrint (("VmxDispatchCrAccess(): gp: 0x%x cr: 0x%x exit_qualification: 0x%x\n", gp, cr, exit_qualification));
-#endif
-
-  switch (exit_qualification & CONTROL_REG_ACCESS_TYPE) {
-  case TYPE_MOV_TO_CR:
-    if (cr == 0) {
-      Cpu->Vmx.GuestCR0 = *(((PULONG64) GuestRegs) + gp);
-      if ((*(((PULONG64) GuestRegs) + gp)) & X86_CR0_PG)        //enable paging
-      {
-        //_KdPrint(("VmxDispatchCrAccess():paging\n"));
-        __vmx_vmwrite (GUEST_CR3, Cpu->Vmx.GuestCR3);
-        if (Cpu->Vmx.GuestEFER & EFER_LME)
-          Cpu->Vmx.GuestEFER |= EFER_LMA;
-        else
-          Cpu->Vmx.GuestEFER &= ~EFER_LMA;
-      } else                    //disable paging
-      {
-        /*
-        //_KdPrint(("VmxDispatchCrAccess():disable paging\n"));                         
-        Cpu->Vmx.GuestCR3 = VmxRead (GUEST_CR3);
-        VmxWrite (GUEST_CR3, g_IdentityPageTableBasePhysicalAddress_Legacy.QuadPart);
-        
-           //if(Cpu->Vmx.GuestMode) //Long Mode
-           //VmxWrite(GUEST_CR3,g_IdentityPageTableBasePhysicalAddress.QuadPart);         
-           //else //Legacy Mode
-           //VmxWrite(GUEST_CR3,g_IdentityPageTableBasePhysicalAddress_Legacy.QuadPart);                          
-         
-        Cpu->Vmx.GuestEFER &= ~EFER_LMA;
-        */
-      }
-#ifdef _X86_
-      __vmx_vmwrite (CR0_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & X86_CR0_PG);
-#else
-      __vmx_vmwrite (CR0_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & X86_CR0_PG);
-#endif
-      VmxUpdateGuestEfer (Cpu);
-      return FALSE;
-    }
-
-    if (cr == 3) {
-      Cpu->Vmx.GuestCR3 = *(((PULONG64) GuestRegs) + gp);
-
-      if (Cpu->Vmx.GuestCR0 & X86_CR0_PG)       //enable paging
-      {
-#if DEBUG_LEVEL>2
-        _KdPrint (("VmxDispatchCrAccess(): TYPE_MOV_TO_CR cr3:0x%x\n", *(((PULONG64) GuestRegs) + gp)));
-#endif
-#ifdef _X86_
-        __vmx_vmwrite (GUEST_CR3, *(((PULONG32) GuestRegs) + gp));
-#else
-        __vmx_vmwrite (GUEST_CR3, *(((PULONG64) GuestRegs) + gp));
-#endif
-      }
-      return TRUE;
-    }
-    if (cr == 4) {
-
-      //if(debugmode)
-      //_KdPrint(("VmxDispatchCrAccess(): TYPE_MOV_TO_CR Cpu->Vmx.GuestEFER:0x%x Cpu->Vmx.GuestCR0:0x%x cr4:0x%x\n",Cpu->Vmx.GuestEFER,Cpu->Vmx.GuestCR0,*(((PULONG64)GuestRegs)+gp)));
-      //Nbp need enabele VMXE. so guest try to clear cr4_vmxe, it would be mask.
-#ifdef _X86_
-      __vmx_vmwrite (CR4_READ_SHADOW, (*(((PULONG32) GuestRegs) + gp)) & (X86_CR4_VMXE | X86_CR4_PAE));
-      Cpu->Vmx.GuestCR4 = *(((PULONG32) GuestRegs) + gp);
-      __vmx_vmwrite (GUEST_CR4, (*(((PULONG32) GuestRegs) + gp)) | X86_CR4_VMXE);
-
-#else
-      //VmxWrite(CR4_READ_SHADOW, (*(((PULONG64)GuestRegs)+gp)) & (X86_CR4_VMXE|X86_CR4_PAE|X86_CR4_PSE));
-      __vmx_vmwrite (CR4_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & (X86_CR4_VMXE));
-
-      Cpu->Vmx.GuestCR4 = *(((PULONG64) GuestRegs) + gp);
-      __vmx_vmwrite (GUEST_CR4, (*(((PULONG64) GuestRegs) + gp)) | X86_CR4_VMXE);
-#endif
-
-      return FALSE;
-
-    }
-    break;
-  case TYPE_MOV_FROM_CR:
-    if (cr == 3) {
-      value = Cpu->Vmx.GuestCR3;
-#if DEBUG_LEVEL>2
-      _KdPrint (("VmxDispatchCrAccess(): TYPE_MOV_FROM_CR cr3:0x%x\n", value));
-#endif
-#ifdef _X86_
-      *(((PULONG32) GuestRegs) + gp) = (ULONG32) value;
-#else
-      *(((PULONG64) GuestRegs) + gp) = value;
-#endif
-    }
-    break;
-  case TYPE_CLTS:
-    break;
-  case TYPE_LMSW:
-    break;
   }
 
   return TRUE;
@@ -508,25 +334,6 @@ static BOOLEAN NTAPI VmxDispatchException (
 }
 #endif
 
-static BOOLEAN NTAPI VmxDispatchINVD (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  PNBP_TRAP Trap,
-  BOOLEAN WillBeAlsoHandledByGuestHv
-)
-{
-  ULONG64 inst_len;
-
-  if (!Cpu || !GuestRegs)
-    return TRUE;
-
-  inst_len = VmxRead (VM_EXIT_INSTRUCTION_LEN);
-  if (Trap->General.RipDelta == 0)
-    Trap->General.RipDelta = inst_len;
-
-  return TRUE;
-}
-
 //
 // ------------------------------------------------------------------------------------
 //
@@ -554,13 +361,6 @@ NTSTATUS NTAPI VmxRegisterTraps (
   };
 #endif
 
-  if (!NT_SUCCESS (Status = TrInitializeGeneralTrap (Cpu, EXIT_REASON_CPUID, 0, // length of the instruction, 0 means length need to be get from vmcs later. 
-                                                     VmxDispatchCpuid, &Trap))) {
-    _KdPrint (("VmxRegisterTraps(): Failed to register VmxDispatchCpuid with status 0x%08hX\n", Status));
-    return Status;
-  }
-  TrRegisterTrap (Cpu, Trap);
-
   if (!NT_SUCCESS (Status = TrInitializeGeneralTrap (Cpu, EXIT_REASON_MSR_READ, 0,      // length of the instruction, 0 means length need to be get from vmcs later. 
                                                      VmxDispatchMsrRead, &Trap))) {
     _KdPrint (("VmxRegisterTraps(): Failed to register VmxDispatchMsrRead with status 0x%08hX\n", Status));
@@ -571,20 +371,6 @@ NTSTATUS NTAPI VmxRegisterTraps (
   if (!NT_SUCCESS (Status = TrInitializeGeneralTrap (Cpu, EXIT_REASON_MSR_WRITE, 0,     // length of the instruction, 0 means length need to be get from vmcs later. 
                                                      VmxDispatchMsrWrite, &Trap))) {
     _KdPrint (("VmxRegisterTraps(): Failed to register VmxDispatchMsrWrite with status 0x%08hX\n", Status));
-    return Status;
-  }
-  TrRegisterTrap (Cpu, Trap);
-
-  if (!NT_SUCCESS (Status = TrInitializeGeneralTrap (Cpu, EXIT_REASON_CR_ACCESS, 0,     // length of the instruction, 0 means length need to be get from vmcs later. 
-                                                     VmxDispatchCrAccess, &Trap))) {
-    _KdPrint (("VmxRegisterTraps(): Failed to register VmxDispatchCrAccess with status 0x%08hX\n", Status));
-    return Status;
-  }
-  TrRegisterTrap (Cpu, Trap);
-
-  if (!NT_SUCCESS (Status = TrInitializeGeneralTrap (Cpu, EXIT_REASON_INVD, 0,  // length of the instruction, 0 means length need to be get from vmcs later. 
-                                                     VmxDispatchINVD, &Trap))) {
-    _KdPrint (("VmxRegisterTraps(): Failed to register VmxDispatchINVD with status 0x%08hX\n", Status));
     return Status;
   }
   TrRegisterTrap (Cpu, Trap);

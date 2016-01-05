@@ -21,4 +21,6 @@ vmxtraps.c
 VmxRegisterTraps ()
 
 vmx.c
-VOID VmxHandleInterception 处理VM-Exit
+VmExitHandler() 处理VM-Exit
+
+EXIT_REASON_CR_ACCESS 必须处理

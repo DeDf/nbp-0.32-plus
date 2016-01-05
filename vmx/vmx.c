@@ -10,7 +10,7 @@ HVM_DEPENDENT Vmx = {
   ARCH_VMX,
   VmxIsImplemented,
   VmxInitialize,
-  VmxVirtualize,
+  NULL,
   VmxShutdown,
   VmxIsNestedEvent,
   VmxDispatchNestedEvent,
@@ -107,11 +107,14 @@ VmExitHandler (
     //
     __vmx_vmread(GUEST_RIP, &GuestEIP);
     __vmx_vmread(VM_EXIT_INSTRUCTION_LEN, &inst_len);
-    __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
+
+    //KdPrint (("VmExitHandler(): ExitReason %x\n", ExitReason));
 
     if (ExitReason == EXIT_REASON_CPUID)
     {
         ULONG32 fn, eax, ebx, ecx, edx;
+
+        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
 
         fn = (ULONG32) GuestRegs->rax;
 #ifdef BP_KNOCK
@@ -129,7 +132,36 @@ VmExitHandler (
         GuestRegs->rbx = ebx;
         GuestRegs->rcx = ecx;
         GuestRegs->rdx = edx;
-        return;
+    }
+    else if (ExitReason == EXIT_REASON_INVD)
+    {
+        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
+    }
+    else if (ExitReason == EXIT_REASON_CR_ACCESS)
+    {
+        ULONG32 exit_qualification = (ULONG32) VmxRead (EXIT_QUALIFICATION);
+        ULONG32 gp = (exit_qualification & CONTROL_REG_ACCESS_REG) >> 8;
+        ULONG32 cr =  exit_qualification & CONTROL_REG_ACCESS_NUM;
+
+        switch (exit_qualification & CONTROL_REG_ACCESS_TYPE)
+        {
+        case TYPE_MOV_TO_CR:
+            if (cr == 3)
+                __vmx_vmwrite (GUEST_CR3, *((PULONG64) GuestRegs + gp));
+            break;
+
+        case TYPE_MOV_FROM_CR:
+            if (cr == 3)
+                __vmx_vmread(GUEST_CR3, (PULONG64) GuestRegs + gp);
+            break;
+
+            //   case TYPE_CLTS:
+            //     break;
+            //   case TYPE_LMSW:
+            //     break;
+        }
+
+        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
     }
     else
     {
@@ -137,16 +169,16 @@ VmExitHandler (
         PNBP_TRAP Trap;
 
         Status = TrFindRegisteredTrap (Cpu, GuestRegs, ExitReason, &Trap);
-        if (!NT_SUCCESS (Status))
+        if ( Status )
         {
-            KdPrint (("VmxHandleInterception(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", ExitReason));
+            KdPrint (("VmExitHandler(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", ExitReason));
             Hvm->ArchShutdown (Cpu, GuestRegs);
             return;
         }
 
         Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv);
-        if (!NT_SUCCESS (Status))
-            KdPrint (("VmxHandleInterception(): HvmExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
+        if ( Status )
+            KdPrint (("VmExitHandler(): TrExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
     }
 }
 
@@ -263,8 +295,9 @@ NTSTATUS VmxSetupVMCS (
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
   // SetCRx()
-  vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); //disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
-  vmwrite (CR4_READ_SHADOW, 0);
+  vmwrite (CR0_GUEST_HOST_MASK, 0);            // disable vmexit 0f mov to cr0 all
+  vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); // disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  vmwrite (CR4_READ_SHADOW, __readcr4() & ~X86_CR4_VMXE);  // Cr4寄存器SHADOW里去掉X86_CR4_VMXE
   //
   vmwrite (GUEST_CR0, __readcr0 ());
   vmwrite (GUEST_CR3, __readcr3 ());
@@ -596,31 +629,6 @@ static NTSTATUS NTAPI VmxShutdown (
 
   // never returns
   return STATUS_SUCCESS;
-}
-
-static NTSTATUS NTAPI VmxVirtualize (
-  PCPU Cpu
-)
-{
-  ULONG64 rsp;
-  if (!Cpu)
-    return STATUS_INVALID_PARAMETER;
-
-  _KdPrint (("VmxVirtualize(): VmxRead: 0x%X \n", VmxRead (VM_INSTRUCTION_ERROR)));
-  _KdPrint (("VmxVirtualize(): RFlags before vmxLaunch: 0x%x \n", RegGetRflags ()));
-  _KdPrint (("VmxVirtualize(): PCPU: 0x%p \n", Cpu));
-  rsp = RegGetRsp ();
-  _KdPrint (("VmxVirtualize(): Rsp: 0x%x \n", rsp));
-
-#ifdef _X86_
-  *((PULONG64) (g_HostStackBaseAddress + 0x0C00)) = (ULONG64) Cpu;
-#endif
-
-  __vmx_vmlaunch();
-  //
-  // VMLAUNCH后操作系统变为Guest，不会返回
-
-  return STATUS_UNSUCCESSFUL;
 }
 
 static BOOLEAN NTAPI VmxIsTrapVaild (
