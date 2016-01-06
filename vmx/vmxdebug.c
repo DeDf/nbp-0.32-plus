@@ -289,11 +289,9 @@ VOID NTAPI VmxCrash (
   KdPrint (("r13 0x%llX\n", GuestRegs->r13));
   KdPrint (("r14 0x%llX\n", GuestRegs->r14));
   KdPrint (("r15 0x%llX\n", GuestRegs->r15));
-  KdPrint (("Guest MSR_EFER Read 0x%llx \n", Cpu->Vmx.GuestEFER));
 
   CmGetPagePaByPageVaCr3 (Cpu, VmxRead (GUEST_CR3), VmxRead (GUEST_RIP), &pa);
   _KdPrint (("VmxCrash() IOA: Failed to map PA 0x%p to VA 0x%p\n", pa.QuadPart, Cpu->SparePage));
-
 
 #if DEBUG_LEVEL>2
   if (!NT_SUCCESS (Status = CmPatchPTEPhysicalAddress (Cpu->SparePagePTE, Cpu->SparePage, pa)))

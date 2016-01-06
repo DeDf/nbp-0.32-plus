@@ -5,5 +5,4 @@ INCLUDES= .; \
           ..\common; 
 SOURCES=\
     vmx.c \
-    vmxtraps.c \
     vmxdebug.c

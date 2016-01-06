@@ -4,7 +4,6 @@
 
 #include "hvm.h"
 #include "hypercalls.h"
-#include "traps.h"
 #include "interrupts.h"
 
 ULONG g_uSubvertedCPUs;
@@ -53,16 +52,6 @@ NTSTATUS HvmSubvertCpu (
 
   // this is valid only for host page tables, as this VA may point into 2mb page in the guest.
   Cpu->SparePagePTE = (PULONG64) ((((ULONG64) (Cpu->SparePage) >> 9) & 0x7ffffffff8) + PT_BASE);
-
-  //
-  //  初始化所有VM_EXIT陷入事件对应的处理例程
-  //
-  Status = VmxRegisterTraps (Cpu);
-  if ( Status )
-  {
-      KdPrint (("HvmSubvertCpu(): VmxRegisterTraps Failed! status : 0x%08hX\n", Status));
-      return STATUS_UNSUCCESSFUL;
-  }
 
   //
   // 准备VM要用到的数据结构 (VMON Region & VMCS for Intel-Vt)

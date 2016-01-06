@@ -10,7 +10,6 @@
 #include "msr.h"
 #include "regs.h"
 #include "interrupts.h"
-#include "vmxtraps.h"
 
 #define	HOST_STACK_SIZE_IN_PAGES	16
 

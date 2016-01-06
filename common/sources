@@ -9,7 +9,6 @@ SOURCES=\
     portio.c \
     comprint.c \
     hypercalls.c \
-    traps.c \
     interrupts.c \
     common.c \
     paging.c \

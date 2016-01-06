@@ -4,7 +4,7 @@
 
 #include "vmx.h"
 #include "cpuid.h"
-#include "vmxtraps.h"
+#include "hypercalls.h"
 
 HVM_DEPENDENT Vmx = {
   ARCH_VMX,
@@ -16,7 +16,7 @@ HVM_DEPENDENT Vmx = {
   VmxDispatchNestedEvent,
   NULL,
   VmxAdjustRip,
-  VmxRegisterTraps,
+  NULL,
   VmxIsTrapVaild
 };
 
@@ -91,9 +91,9 @@ BOOLEAN NTAPI VmxIsImplemented ()
 
 VOID
 VmExitHandler (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-)
+               PCPU Cpu,
+               PGUEST_REGS GuestRegs
+               )
 {
     ULONG64 ExitReason;
     ULONG_PTR GuestEIP;
@@ -114,28 +114,35 @@ VmExitHandler (
     {
         ULONG32 fn, eax, ebx, ecx, edx;
 
-        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
-
         fn = (ULONG32) GuestRegs->rax;
 #ifdef BP_KNOCK
         if (fn == BP_KNOCK_EAX)
         {
             KdPrint (("Magic knock received: %x\n", BP_KNOCK_EAX));
             GuestRegs->rax = 0x68686868;
-            return;
         }
+        else
 #endif
-
-        ecx = (ULONG32) GuestRegs->rcx;
-        GetCpuIdInfo (fn, &eax, &ebx, &ecx, &edx);
-        GuestRegs->rax = eax;
-        GuestRegs->rbx = ebx;
-        GuestRegs->rcx = ecx;
-        GuestRegs->rdx = edx;
+        {
+            ecx = (ULONG32) GuestRegs->rcx;
+            GetCpuIdInfo (fn, &eax, &ebx, &ecx, &edx);
+            GuestRegs->rax = eax;
+            GuestRegs->rbx = ebx;
+            GuestRegs->rcx = ecx;
+            GuestRegs->rdx = edx;
+        }
     }
     else if (ExitReason == EXIT_REASON_INVD)
     {
-        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
+
+    }
+    else if (ExitReason == EXIT_REASON_VMCALL)
+    {
+        HcDispatchHypercall(Cpu, GuestRegs);
+    }
+    else if (ExitReason >= EXIT_REASON_VMCLEAR && ExitReason <= EXIT_REASON_VMXON)
+    {
+        __vmx_vmwrite(GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & (~0x8d5) | 0x1 /* VMFailInvalid */ );
     }
     else if (ExitReason == EXIT_REASON_CR_ACCESS)
     {
@@ -160,26 +167,72 @@ VmExitHandler (
             //   case TYPE_LMSW:
             //     break;
         }
+    }
+    else if (ExitReason == EXIT_REASON_MSR_READ)
+    {
+        LARGE_INTEGER MsrValue;
+        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
 
-        __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
+        switch (ecx)
+        {
+        case MSR_IA32_SYSENTER_CS:
+            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_CS);
+            break;
+
+        case MSR_IA32_SYSENTER_ESP:
+            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_ESP);
+            break;
+        case MSR_IA32_SYSENTER_EIP:
+            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_EIP);
+            break;
+        case MSR_GS_BASE:
+            MsrValue.QuadPart = VmxRead (GUEST_GS_BASE);
+            break;
+        case MSR_FS_BASE:
+            MsrValue.QuadPart = VmxRead (GUEST_FS_BASE);
+            break;
+        default:
+            MsrValue.QuadPart = __readmsr (ecx);
+        }
+
+        GuestRegs->rax = MsrValue.LowPart;
+        GuestRegs->rdx = MsrValue.HighPart;
+    }
+    else if (ExitReason == EXIT_REASON_MSR_WRITE)
+    {
+        LARGE_INTEGER MsrValue;
+        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
+
+        MsrValue.LowPart  = (ULONG32) GuestRegs->rax;
+        MsrValue.HighPart = (ULONG32) GuestRegs->rdx;
+
+        switch (ecx)
+        {
+        case MSR_IA32_SYSENTER_CS:
+            __vmx_vmwrite (GUEST_SYSENTER_CS, MsrValue.QuadPart);
+            break;
+        case MSR_IA32_SYSENTER_ESP:
+            __vmx_vmwrite (GUEST_SYSENTER_ESP, MsrValue.QuadPart);
+            break;
+        case MSR_IA32_SYSENTER_EIP:
+            __vmx_vmwrite (GUEST_SYSENTER_EIP, MsrValue.QuadPart);
+            break;
+        case MSR_GS_BASE:
+            __vmx_vmwrite (GUEST_GS_BASE, MsrValue.QuadPart);
+            break;
+        case MSR_FS_BASE:
+            __vmx_vmwrite (GUEST_FS_BASE, MsrValue.QuadPart);
+            break;
+        default:
+            MsrWrite (ecx, MsrValue.QuadPart);
+        }
     }
     else
     {
-        NTSTATUS Status;
-        PNBP_TRAP Trap;
-
-        Status = TrFindRegisteredTrap (Cpu, GuestRegs, ExitReason, &Trap);
-        if ( Status )
-        {
-            KdPrint (("VmExitHandler(): TrFindRegisteredTrap() failed for exitcode 0x%llX\n", ExitReason));
-            Hvm->ArchShutdown (Cpu, GuestRegs);
-            return;
-        }
-
-        Status = TrExecuteGeneralTrapHandler (Cpu, GuestRegs, Trap, WillBeAlsoHandledByGuestHv);
-        if ( Status )
-            KdPrint (("VmExitHandler(): TrExecuteGeneralTrapHandler() failed with status 0x%08hX\n", Status));
+        KdPrint (("VmExitHandler(): failed for exitcode 0x%llX\n", ExitReason));
     }
+
+    __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
 }
 
 static VOID NTAPI VmxDispatchNestedEvent (
@@ -188,7 +241,6 @@ static VOID NTAPI VmxDispatchNestedEvent (
 )
 {
   NTSTATUS Status;
-  PNBP_TRAP Trap;
   BOOLEAN bInterceptedByGuest;
   ULONG64 Exitcode;
 
@@ -263,15 +315,13 @@ NTSTATUS VmxSetupVMCS (
 )
 {
   SEGMENT_SELECTOR SegmentSelector;
-  PHYSICAL_ADDRESS VmcsToContinuePA = Cpu->Vmx.VmcsToContinuePA;
-  PVOID GdtBase;
-  ULONG32 Interceptions = 0;
+  PVOID GdtBase = (PVOID) GetGdtBase ();
 
   if (!Cpu->Vmx.OriginalVmcs)
     return STATUS_INVALID_PARAMETER;
 
-  __vmx_vmclear (&VmcsToContinuePA);
-  __vmx_vmptrld (&VmcsToContinuePA);
+  __vmx_vmclear (&Cpu->Vmx.VmcsToContinuePA);  // 取消当前的VMCS的激活状态
+  __vmx_vmptrld (&Cpu->Vmx.VmcsToContinuePA);  // 加载新的VMCS并设为激活状态
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
@@ -280,7 +330,7 @@ NTSTATUS VmxSetupVMCS (
 
   /*32BIT Control Fields. */  //disable Vmexit by Extern-interrupt,NMI and Virtual NMI
   vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
-  vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (Interceptions, MSR_IA32_VMX_PROCBASED_CTLS));
+  vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PROCBASED_CTLS));
   vmwrite (EXCEPTION_BITMAP, 0);
   vmwrite (VM_EXIT_CONTROLS,
             VmxAdjustControls (VM_EXIT_IA32E_MODE | VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
@@ -311,7 +361,6 @@ NTSTATUS VmxSetupVMCS (
   // SetDT()
   vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
   vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
-  GdtBase = (PVOID) GetGdtBase ();
   vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
   vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
   //
