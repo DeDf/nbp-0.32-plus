@@ -9,7 +9,7 @@ DriverUnload (
     PDRIVER_OBJECT DriverObject
 )
 {
-    if ( HvmSpitOutBluepill () )             // 吐出药丸子
+    if ( HvmSpitOutBluepill () )    // 吐出药丸子
         KdPrint (("[NEWBLUEPILL] HvmSpitOutBluepill() failed!\n"));
     else
         KdPrint (("[NEWBLUEPILL] Unloading finished~\n"));
@@ -21,25 +21,18 @@ DriverEntry (
     PUNICODE_STRING RegistryPath
 )
 {
-    NTSTATUS status;
-
     KdPrint (("\n[NEWBLUEPILL] DriverEntry~\n"));
 
-    if (VmxIsImplemented ())
-    {
-        Hvm = &Vmx;
-    }
-    else
+    if (!VmxIsImplemented ())
     {
         KdPrint (("DriverEntry(): VMX is not supported!\n"));
         return STATUS_NOT_SUPPORTED;
     }
-
-    status = HvmSwallowBluepill ();          // 吞下药丸子
-    if (status)
+        
+    if ( HvmSwallowBluepill () )    // 吞下药丸子
     {
-        KdPrint (("[NEWBLUEPILL] HvmSwallowBluepill() failed with status 0x%08X\n", status));
-        return status;
+        KdPrint (("[NEWBLUEPILL] HvmSwallowBluepill() failed!\n"));
+        return STATUS_UNSUCCESSFUL;
     }
 
     DriverObject->DriverUnload = DriverUnload;

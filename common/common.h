@@ -333,86 +333,7 @@ typedef struct _GUEST_REGS
  *PGUEST_REGS;
 #endif
 
-typedef BOOLEAN (
-  NTAPI * ARCH_IS_HVM_IMPLEMENTED
-) (
-);
-
-typedef NTSTATUS (
-  NTAPI * ARCH_INITIALIZE
-) (
-  PCPU Cpu,
-  PVOID GuestRip,
-  PVOID GuestRsp
-);
-typedef NTSTATUS (
-  NTAPI * ARCH_VIRTUALIZE
-) (
-  PCPU Cpu
-);
-typedef NTSTATUS (
-  NTAPI * ARCH_SHUTDOWN
-) (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
-
-typedef BOOLEAN (
-  NTAPI * ARCH_IS_NESTED_EVENT
-) (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
-typedef VOID (
-  NTAPI * ARCH_DISPATCH_NESTED_EVENT
-) (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
-typedef VOID (
-  NTAPI * ARCH_DISPATCH_EVENT
-) (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-);
-typedef VOID (
-  NTAPI * ARCH_ADJUST_RIP
-) (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  ULONG64 Delta
-);
-typedef NTSTATUS (
-  NTAPI * ARCH_REGISTER_TRAPS
-) (
-  PCPU Cpu
-);
-typedef BOOLEAN (
-  NTAPI * ARCH_IS_TRAP_VALID
-) (
-  ULONG TrappedVmExit
-);                              //add by cini
-
 typedef ULONG BPSPIN_LOCK, *PBPSPIN_LOCK;
-
-typedef struct
-{
-  UCHAR Architecture;
-
-  ARCH_IS_HVM_IMPLEMENTED ArchIsHvmImplemented;
-
-  ARCH_INITIALIZE ArchInitialize;
-  ARCH_VIRTUALIZE ArchVirtualize;
-  ARCH_SHUTDOWN ArchShutdown;
-
-  ARCH_IS_NESTED_EVENT ArchIsNestedEvent;
-  ARCH_DISPATCH_NESTED_EVENT ArchDispatchNestedEvent;
-  ARCH_DISPATCH_EVENT ArchDispatchEvent;
-  ARCH_ADJUST_RIP ArchAdjustRip;
-  ARCH_REGISTER_TRAPS ArchRegisterTraps;
-  ARCH_IS_TRAP_VALID ArchIsTrapValid;
-
-} HVM_DEPENDENT, *PHVM_DEPENDENT;
 
 NTSTATUS NTAPI CmPatchPTEPhysicalAddress (
   PULONG64 pPte,
@@ -434,13 +355,6 @@ NTSTATUS NTAPI CmSetIdtEntry (
   PVOID TargetOffset,
   UCHAR InterruptStackTable,
   UCHAR Attributes
-);
-
-NTSTATUS NTAPI CmGetPagePaByPageVaCr3 (
-  PCPU Cpu,
-  ULONG64 CR3,
-  ULONG64 PageVA,
-  PHYSICAL_ADDRESS * pPA
 );
 
 NTSTATUS NTAPI CmDumpGdt (

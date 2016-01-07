@@ -7,7 +7,6 @@
 #include "interrupts.h"
 
 ULONG g_uSubvertedCPUs;
-PHVM_DEPENDENT Hvm;
 
 NTSTATUS HvmSubvertCpu (
   PVOID GuestRsp
@@ -15,46 +14,30 @@ NTSTATUS HvmSubvertCpu (
 {
     NTSTATUS Status;
     PCPU Cpu;
-    PVOID HostKernelStackBase;
-    PHYSICAL_ADDRESS phy_addr;
+    PVOID HostStack;
 
     KdPrint (("HvmSubvertCpu(): Running on processor #%d\n", KeGetCurrentProcessorNumber ()));
 
     // 为Guest分配内核栈(按页分配), 大小与Host相同
-    HostKernelStackBase = ExAllocatePoolWithTag (NonPagedPool, HOST_STACK_SIZE_IN_PAGES * PAGE_SIZE, MEM_TAG);
-    if (!HostKernelStackBase)
+    HostStack = ExAllocatePoolWithTag (NonPagedPool, 2 * PAGE_SIZE, MEM_TAG);
+    if (!HostStack)
     {
         KdPrint (("HvmSubvertCpu(): Failed to allocate host stack!\n"));
         return STATUS_INSUFFICIENT_RESOURCES;
     }
-    RtlZeroMemory (HostKernelStackBase, HOST_STACK_SIZE_IN_PAGES * PAGE_SIZE);
+    RtlZeroMemory (HostStack, 2 * PAGE_SIZE);
 
   //
   // 设置Cpu数据结构的内存地址为 [栈顶-8h-sizeof(CPU)]
   //
-  Cpu = (PCPU) ((PCHAR) HostKernelStackBase + HOST_STACK_SIZE_IN_PAGES * PAGE_SIZE - 8 - sizeof (CPU));
+  Cpu = (PCPU) ((PCHAR) HostStack + 2 * PAGE_SIZE - 8 - sizeof (CPU));
 
-  Cpu->HostStack       = HostKernelStackBase;    // 内核栈基址
-  Cpu->SelfPointer     = Cpu;                    // 自身的指针
-  Cpu->ProcessorNumber = KeGetCurrentProcessorNumber ();  // 当前处理器数量
-  Cpu->Nested          = FALSE;                  // TODISCOVER: 是否嵌套
-
-  InitializeListHead (&Cpu->GeneralTrapsList);   // 初始化普通陷入事件记录链
-  InitializeListHead (&Cpu->MsrTrapsList);       // 初始化MSR读写陷入事件记录链
-  InitializeListHead (&Cpu->IoTrapsList);        // 初始化IO读写陷入事件记录链
-
-  phy_addr.QuadPart = -1;
-  Cpu->SparePage = MmAllocateContiguousMemory (PAGE_SIZE, phy_addr);
-  if (!Cpu->SparePage) {
-    KdPrint (("HvmSubvertCpu(): Failed to allocate 1 page for the dummy page (DPA_CONTIGUOUS)\n"));
-    return STATUS_UNSUCCESSFUL;
-  }
-
-  // this is valid only for host page tables, as this VA may point into 2mb page in the guest.
-  Cpu->SparePagePTE = (PULONG64) ((((ULONG64) (Cpu->SparePage) >> 9) & 0x7ffffffff8) + PT_BASE);
+  Cpu->SelfPointer     = Cpu;
+  Cpu->HostStack       = HostStack;
+  Cpu->ProcessorNumber = KeGetCurrentProcessorNumber ();
 
   //
-  // 准备VM要用到的数据结构 (VMON Region & VMCS for Intel-Vt)
+  // 准备VM要用到的数据结构 (VMXON & VMCS )
   // GuestRip和GuestRsp会被填进VMCS结构，代表Guest原本的代码位置和栈顶指针
   //
   Status = VmxInitialize (Cpu, CmResumeGuest, GuestRsp);
@@ -77,7 +60,6 @@ NTSTATUS HvmSubvertCpu (
 NTSTATUS
 HvmSpitOutBluepill ()
 {
-    NTSTATUS Status;
     KIRQL OldIrql;
     CHAR i;
 
@@ -87,13 +69,7 @@ HvmSpitOutBluepill ()
         KeSetSystemAffinityThread ((KAFFINITY) ((ULONG_PTR)1 << i));  // 将代码运行在指定CPU
         OldIrql = KeRaiseIrqlToDpcLevel ();
 
-        Status = HcMakeHypercall (NBP_HYPERCALL_UNLOAD, 0, NULL);
-        if ( Status )
-        {
-            KdPrint (("HcMakeHypercall() failed on processor #%d, status 0x%08hX\n",
-                KeGetCurrentProcessorNumber (),
-                Status));
-        }
+        VmxVmCall (NBP_HYPERCALL_UNLOAD);
 
         KeLowerIrql (OldIrql);
         clear_in_cr4 (X86_CR4_VMXE);
@@ -123,7 +99,7 @@ HvmSwallowBluepill ()
 
         if (Status)
         {
-            KdPrint (("HvmSwallowBluepill(): HvmSubvertCpu() failed with status 0x%08hX\n", Status));
+            KdPrint (("HvmSwallowBluepill(): CmSubvert() failed with status 0x%08hX\n", Status));
             break;
         }
     }

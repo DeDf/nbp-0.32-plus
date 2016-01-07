@@ -6,22 +6,7 @@
 #include "cpuid.h"
 #include "hypercalls.h"
 
-HVM_DEPENDENT Vmx = {
-  ARCH_VMX,
-  VmxIsImplemented,
-  VmxInitialize,
-  NULL,
-  VmxShutdown,
-  VmxIsNestedEvent,
-  VmxDispatchNestedEvent,
-  NULL,
-  VmxAdjustRip,
-  NULL,
-  VmxIsTrapVaild
-};
-
 ULONG64 g_HostStackBaseAddress;
-
 extern ULONG g_uSubvertedCPUs;
 
 UCHAR vmwrite(size_t CtlCode, size_t Value)
@@ -30,63 +15,27 @@ UCHAR vmwrite(size_t CtlCode, size_t Value)
     return __vmx_vmwrite(CtlCode, Value);
 }
 
-NTSTATUS NTAPI VmxDisable (
-)
-{
-  VmxTurnOff ();
-
-  clear_in_cr4 (X86_CR4_VMXE);
-
-  return STATUS_SUCCESS;
-}
-
-static BOOLEAN NTAPI VmxIsUnconditionalEvent (
-  ULONG64 uVmExitNumber
-)
-{
-  if (uVmExitNumber == EXIT_REASON_TRIPLE_FAULT
-      || uVmExitNumber == EXIT_REASON_INIT
-      || uVmExitNumber == EXIT_REASON_SIPI
-      || uVmExitNumber == EXIT_REASON_IO_SMI
-      || uVmExitNumber == EXIT_REASON_OTHER_SMI
-      || uVmExitNumber == EXIT_REASON_TASK_SWITCH
-      || uVmExitNumber == EXIT_REASON_CPUID
-      || uVmExitNumber == EXIT_REASON_INVD || uVmExitNumber == EXIT_REASON_RSM
-      || uVmExitNumber == EXIT_REASON_VMCALL
-      || uVmExitNumber == EXIT_REASON_VMCLEAR
-      || uVmExitNumber == EXIT_REASON_VMLAUNCH
-      || uVmExitNumber == EXIT_REASON_VMPTRLD
-      || uVmExitNumber == EXIT_REASON_VMPTRST
-      || uVmExitNumber == EXIT_REASON_VMREAD
-      || uVmExitNumber == EXIT_REASON_VMRESUME
-      || uVmExitNumber == EXIT_REASON_VMWRITE
-      || uVmExitNumber == EXIT_REASON_VMXOFF
-      || uVmExitNumber == EXIT_REASON_VMXON
-      || uVmExitNumber == EXIT_REASON_INVALID_GUEST_STATE
-      || uVmExitNumber == EXIT_REASON_MSR_LOADING || uVmExitNumber == EXIT_REASON_MACHINE_CHECK)
-    return TRUE;
-  else
-    return FALSE;
-}
-
 /********************************************************************
   检测当前的处理器是否支持Vt
 ********************************************************************/
-BOOLEAN NTAPI VmxIsImplemented ()
+BOOLEAN VmxIsImplemented ()
 {
   ULONG32 eax, ebx, ecx, edx;
   GetCpuIdInfo (0, &eax, &ebx, &ecx, &edx);
-  if (eax < 1) {
+  if (eax < 1)
+  {
     KdPrint (("VmxIsImplemented(): Extended CPUID functions not implemented\n"));
     return FALSE;
   }
-  if (!(ebx == 0x756e6547 && ecx == 0x6c65746e && edx == 0x49656e69)) {
+
+  if (!(ebx == 0x756e6547 && ecx == 0x6c65746e && edx == 0x49656e69))
+  {
     KdPrint (("VmxIsImplemented(): Not an INTEL processor\n"));
     return FALSE;
   }
-  //intel cpu use fun_0x1 to test VMX.  
+ 
   GetCpuIdInfo (0x1, &eax, &ebx, &ecx, &edx);
-  return (BOOLEAN) (CmIsBitSet (ecx, 5));
+  return CmIsBitSet (ecx, 5);
 }
 
 VOID
@@ -320,8 +269,8 @@ NTSTATUS VmxSetupVMCS (
   if (!Cpu->Vmx.OriginalVmcs)
     return STATUS_INVALID_PARAMETER;
 
-  __vmx_vmclear (&Cpu->Vmx.VmcsToContinuePA);  // 取消当前的VMCS的激活状态
-  __vmx_vmptrld (&Cpu->Vmx.VmcsToContinuePA);  // 加载新的VMCS并设为激活状态
+  __vmx_vmclear (&Cpu->Vmx.VMCS_PA);  // 取消当前的VMCS的激活状态
+  __vmx_vmptrld (&Cpu->Vmx.VMCS_PA);  // 加载新的VMCS并设为激活状态
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
@@ -433,129 +382,65 @@ NTSTATUS NTAPI VmxInitialize (
   PVOID GuestRsp
 )
 {
-    NTSTATUS Status;
-  PHYSICAL_ADDRESS AlignedVmcsPA;
-  ULONG64 VaDelta;
-  PHYSICAL_ADDRESS t;
+    // 检查IA32_FEATURE_CONTROL寄存器的Lock位
+    if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
+    {
+        KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[0] = 0!\n"));
+        return STATUS_UNSUCCESSFUL;
+    }
 
-  // 检查IA32_FEATURE_CONTROL寄存器的Lock位
-  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
-  {
-      KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[0] = 0!\n"));
-      return STATUS_UNSUCCESSFUL;
-  }
+    // 检查IA32_FEATURE_CONTROL寄存器的Enable VMX outside SMX位
+    if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_VMXON_ENABLED))
+    {
+        KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[2] = 0!\n"));
+        return STATUS_UNSUCCESSFUL;
+    }
 
-  // 检查IA32_FEATURE_CONTROL寄存器的Enable VMX outside SMX位
-  if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_VMXON_ENABLED))
-  {
-      KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[2] = 0!\n"));
-      return STATUS_UNSUCCESSFUL;
-  }
+    //
+    // 为VMXON结构分配空间 (Allocate VMXON region)
+    //
+    Cpu->OriginaVmxonR = MmAllocateNonCachedMemory(PAGE_SIZE);
+    if (!Cpu->OriginaVmxonR)
+    {
+        KdPrint (("VmxInitialize(): Failed to allocate memory for original VMXON\n"));
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory (Cpu->OriginaVmxonR, PAGE_SIZE);
+    Cpu->OriginalVmxonRPA = MmGetPhysicalAddress(Cpu->OriginaVmxonR);
 
-#ifdef _X86_
-  g_HostStackBaseAddress = (ULONG64)MmAllocateContiguousPages (1, NULL);
-#endif
+    //
+    // 为VMCS结构分配空间 (Allocate VMCS)
+    //
+    Cpu->OriginalVmcs = MmAllocateNonCachedMemory(PAGE_SIZE);
+    if (!Cpu->OriginalVmcs)
+    {
+        KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
+        return STATUS_INSUFFICIENT_RESOURCES;
+    }
+    RtlZeroMemory (Cpu->OriginalVmcs, PAGE_SIZE);
+    Cpu->VMCS_PA = MmGetPhysicalAddress(Cpu->OriginalVmcs);
 
-  //
-  // 为VMXON结构分配空间 (Allocate VMXON region)
-  //
-  Cpu->Vmx.OriginaVmxonR = MmAllocateContiguousPages (VMX_VMXONR_SIZE_IN_PAGES, &Cpu->Vmx.OriginalVmxonRPA);
-  if (!Cpu->Vmx.OriginaVmxonR)
-  {
-    KdPrint (("VmxInitialize(): Failed to allocate memory for original VMXON\n"));
-    return STATUS_INSUFFICIENT_RESOURCES;
-  }
+    set_in_cr4 (X86_CR4_VMXE);
+    *(ULONG64 *) Cpu->OriginaVmxonR = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id
+    *(ULONG64 *) Cpu->OriginalVmcs  = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); 
 
-  //
-  // 为VMCS结构分配空间 (Allocate VMCS)
-  //
-  Cpu->Vmx.OriginalVmcs = MmAllocateContiguousPages (VMX_VMCS_SIZE_IN_PAGES, &Cpu->Vmx.OriginalVmcsPA);
-  if (!Cpu->Vmx.OriginalVmcs)
-  {
-    KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
-    return STATUS_INSUFFICIENT_RESOURCES;
-  }
+    if (__vmx_on (&Cpu->OriginalVmxonRPA))
+    {
+        _KdPrint (("VmxOn Failed!\n"));
+        return STATUS_UNSUCCESSFUL;
+    }
 
-  //
-  // TODISCOVER:
-  // these two PAs are equal if there're no nested VMs
-  //
-  Cpu->Vmx.VmcsToContinuePA = Cpu->Vmx.OriginalVmcsPA;
+    //============================= 配置VMCS ================================
 
-  // init IOBitmap and MsrBitmap
+    if ( VmxSetupVMCS (Cpu, GuestRip, GuestRsp) )
+    {
+        KdPrint (("VmxSetupVMCS() failed!"));
+        VmxTurnOff ();
+        clear_in_cr4 (X86_CR4_VMXE);
+        return STATUS_UNSUCCESSFUL;
+    }
 
-  //
-  // 为IO位图A分配空间, IOA控制0000H-7FFFH
-  //
-  Cpu->Vmx.IOBitmapA = MmAllocateContiguousPages (VMX_IOBitmap_SIZE_IN_PAGES, &Cpu->Vmx.IOBitmapAPA);
-  if (!Cpu->Vmx.IOBitmapA)
-  {
-    _KdPrint (("VmxInitialize(): Failed to allocate memory for IOBitmapA\n"));
-    return STATUS_INSUFFICIENT_RESOURCES;
-  }
-  RtlZeroMemory (Cpu->Vmx.IOBitmapA, PAGE_SIZE);   // IO位图A初始化为0
-
-  _KdPrint (("VmxInitialize(): IOBitmapA VA: 0x%p\n", Cpu->Vmx.IOBitmapA));
-  _KdPrint (("VmxInitialize(): IOBitmapA PA: 0x%llx\n", Cpu->Vmx.IOBitmapAPA.QuadPart));
-
-  //
-  // 为IO位图B分配空间, IOB控制8000H-FFFFH
-  //
-  Cpu->Vmx.IOBitmapB = MmAllocateContiguousPages (VMX_IOBitmap_SIZE_IN_PAGES, &Cpu->Vmx.IOBitmapBPA);
-  if (!Cpu->Vmx.IOBitmapB) {
-    _KdPrint (("VmxInitialize(): Failed to allocate memory for IOBitmapB\n"));
-    return STATUS_INSUFFICIENT_RESOURCES;
-  }
-  RtlZeroMemory (Cpu->Vmx.IOBitmapB, PAGE_SIZE);   // IO位图B初始化为0
-
-  _KdPrint (("VmxInitialize(): IOBitmapB VA: 0x%p\n", Cpu->Vmx.IOBitmapB));
-  _KdPrint (("VmxInitialize(): IOBitmapB PA: 0x%llx\n", Cpu->Vmx.IOBitmapBPA.QuadPart));
-
-  //
-  // 为MSR位图分配空间
-  //
-  Cpu->Vmx.MSRBitmap = MmAllocateContiguousPages (VMX_MSRBitmap_SIZE_IN_PAGES, &Cpu->Vmx.MSRBitmapPA);
-  if (!Cpu->Vmx.MSRBitmap) {
-    _KdPrint (("VmxInitialize(): Failed to allocate memory for  MSRBitmap\n"));
-    return STATUS_INSUFFICIENT_RESOURCES;
-  }
-  RtlZeroMemory (Cpu->Vmx.MSRBitmap, PAGE_SIZE);   // MSR位图初始化为0
-
-  _KdPrint (("VmxInitialize(): MSRBitmap VA: 0x%p\n",   Cpu->Vmx.MSRBitmap));
-  _KdPrint (("VmxInitialize(): MSRBitmap PA: 0x%llx\n", Cpu->Vmx.MSRBitmapPA.QuadPart));
-
-  set_in_cr4 (X86_CR4_VMXE);
-  *(ULONG64 *) Cpu->Vmx.OriginaVmxonR = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id
-  *(ULONG64 *) Cpu->Vmx.OriginalVmcs  = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); 
-  t = MmGetPhysicalAddress (Cpu->Vmx.OriginaVmxonR);
-  if (__vmx_on (&t))
-  {
-    _KdPrint (("VmxOn Failed!\n"));
-    return STATUS_UNSUCCESSFUL;
-  }
-
-  //============================= 配置VMCS ================================
-
-  if (!NT_SUCCESS (Status = VmxSetupVMCS (Cpu, GuestRip, GuestRsp)))
-  {
-    KdPrint (("Vmx(): VmxSetupVMCS() failed with status 0x%08hX\n", Status));
-    VmxDisable ();
-    return Status;
-  }
-
-  //
-  // 读取MSR_EFE/CR0/CR3/CR4等寄存器的内容并记录到CPU结构
-  //
-  Cpu->Vmx.GuestEFER = __readmsr (MSR_EFER);
-  Cpu->Vmx.GuestCR0  = __readcr0 ();
-  Cpu->Vmx.GuestCR3  = __readcr3 ();
-  Cpu->Vmx.GuestCR4  = __readcr4 ();
-
-#ifdef INTERCEPT_RDTSCs
-  Cpu->Tracing = 0;
-#endif
-
-  return STATUS_SUCCESS;
+    return STATUS_SUCCESS;
 }
 
 static VOID VmxGenerateTrampolineToGuest (
@@ -673,7 +558,8 @@ static NTSTATUS NTAPI VmxShutdown (
   VmxGenerateTrampolineToGuest (Cpu, GuestRegs, Trampoline);
 
   _KdPrint (("VmxShutdown(): Trampoline generated\n", Cpu->ProcessorNumber));
-  VmxDisable ();
+  VmxTurnOff ();
+  clear_in_cr4 (X86_CR4_VMXE);
   ((VOID (*)()) & Trampoline) ();
 
   // never returns

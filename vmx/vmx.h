@@ -12,8 +12,6 @@
  * VMX Exit Reasons
  */
 
-#define VMX_EXIT_REASONS_FAILED_VMENTRY 0x80000000
-
 #define EXIT_REASON_EXCEPTION_NMI       0
 #define EXIT_REASON_EXTERNAL_INTERRUPT  1
 #define EXIT_REASON_TRIPLE_FAULT        2
@@ -189,39 +187,6 @@ VOID set_in_cr4 (
 VOID clear_in_cr4 (
   ULONG32 mask
 );
-
-#define	VMX_VMCS_SIZE_IN_PAGES	1
-#define	VMX_IOBitmap_SIZE_IN_PAGES	1
-#define	VMX_MSRBitmap_SIZE_IN_PAGES	1
-
-#define	VMX_VMXONR_SIZE_IN_PAGES	2
-
-typedef struct _VMX
-{
-  PHYSICAL_ADDRESS VmcsToContinuePA;    // MUST go first in the structure; refer to SvmVmrun() for details
-  PVOID _2mbVmcbMap;
-
-  PHYSICAL_ADDRESS OriginalVmcsPA;
-  PVOID OriginalVmcs;           // VMCS which was originally built by the BP for the guest OS
-  PHYSICAL_ADDRESS OriginalVmxonRPA;    // Vmxon Region which was originally built by the BP for the guest OS
-  PVOID OriginaVmxonR;
-
-  PHYSICAL_ADDRESS IOBitmapAPA; // points to IOBitMapA.
-  PVOID IOBitmapA;
-
-  PHYSICAL_ADDRESS IOBitmapBPA; // points to IOBitMapB
-  PVOID IOBitmapB;
-
-  PHYSICAL_ADDRESS MSRBitmapPA; // points to MsrBitMap
-  PVOID MSRBitmap;
-
-  ULONG64 GuestCR0;             //Guest's CR0. 
-  ULONG64 GuestCR3;             //Guest's CR3. for storing guest cr3 when guest diasble paging.
-  ULONG64 GuestCR4;             //Guest's CR4. 
-  ULONG64 GuestEFER;
-  UCHAR GuestStateBeforeInterrupt[0xc00];
-
-} VMX, *PVMX;
 
 #include "hvm.h"
 

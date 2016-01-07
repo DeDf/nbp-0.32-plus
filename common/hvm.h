@@ -11,8 +11,6 @@
 #include "regs.h"
 #include "interrupts.h"
 
-#define	HOST_STACK_SIZE_IN_PAGES	16
-
 // ntamd64_x.h
 #define KGDT64_NULL      (0 * 16)       // NULL descriptor
 #define KGDT64_R0_CODE   (1 * 16)       // kernel mode 64-bit code
@@ -34,63 +32,20 @@
 #define BP_IDT_LIMIT	0xfff
 #define BP_TSS_LIMIT	0x68    // 0x67 min
 
-#define	ARCH_VMX	2
-
 typedef struct _CPU
 {
   PCPU SelfPointer;             // MUST go first in the structure; refer to interrupt handlers for details
 
-  VMX Vmx;
+  PHYSICAL_ADDRESS VMCS_PA;       // MUST go first in the structure; refer to SvmVmrun() for details
+  PVOID OriginalVmcs;             // VMCS which was originally built by the BP for the guest OS
+  PHYSICAL_ADDRESS OriginalVmxonRPA;    // Vmxon Region which was originally built by the BP for the guest OS
+  PVOID OriginaVmxonR;
 
   ULONG ProcessorNumber;
-  ULONG64 TotalTscOffset;
-
-  LARGE_INTEGER LapicBaseMsr;
-  PHYSICAL_ADDRESS LapicPhysicalBase;
-  PUCHAR LapicVirtualBase;
-
-  LIST_ENTRY GeneralTrapsList;  // list of BP_TRAP structures
-  LIST_ENTRY MsrTrapsList;      //
-  LIST_ENTRY IoTrapsList;       //
-
-  PVOID SparePage;              // a single page which was allocated just to get an unused PTE.
-  PHYSICAL_ADDRESS SparePagePA; // original PA of the SparePage
-  PULONG64 SparePagePTE;
-
-  PSEGMENT_DESCRIPTOR GdtArea;
-  PVOID IdtArea;
-
-  PVOID HostStack;              // note that CPU structure reside in this memory region
-  BOOLEAN Nested;
-
-#ifdef INTERCEPT_RDTSCs
-
-  // variables for RDTSC tracing and cheating
-  ULONG64 Tsc;
-  ULONG64 LastTsc;
-  ULONG64 EmulatedCycles;
-  int Tracing;                  // we trace instructions until Tracing = 0
-  int NoOfRecordedInstructions;
-
-  //currently not implemeneted:
-  //int NextInstrOffsetinBuffer;
-  //PVOID RecordedInstructions[INSTR_TRACE_MAX * 16];
-
-#endif
-
-  ULONG64 ComPrintLastTsc;
+  PVOID HostStack;
 
 } CPU, *PCPU;
 
-extern PHVM_DEPENDENT Hvm;
+NTSTATUS HvmSwallowBluepill ();
 
-extern HVM_DEPENDENT Vmx;
-
-NTSTATUS NTAPI HvmSwallowBluepill ();
-
-NTSTATUS NTAPI HvmSpitOutBluepill ();
-
-VOID NTAPI HvmSetupTimeBomb (
-  PVOID OriginalTrampoline,
-  CCHAR ProcessorNumber
-);
+NTSTATUS HvmSpitOutBluepill ();
