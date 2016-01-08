@@ -2,11 +2,6 @@ EXTERN	HvmSubvertCpu:PROC
 
 .CODE
 
-CmCli PROC
-	cli
-	ret
-CmCli  ENDP
-
 GetCpuIdInfo PROC
    push   rbp
    mov      rbp, rsp

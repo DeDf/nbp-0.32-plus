@@ -2,52 +2,7 @@
 ; Copyright holder: Invisible Things Lab
 ;
 
-EXTERN	VmExitHandler:PROC  
-
-vmx_clear MACRO
-	BYTE	066h, 0Fh, 0C7h
-ENDM
-
-vmx_ptrld MACRO
-	BYTE	0Fh, 0C7h
-ENDM
-
-vmx_ptrst MACRO
-	BYTE	0Fh, 0C7h
-ENDM
-
-vmx_read MACRO
-	BYTE	0Fh, 078h
-ENDM
-
-vmx_on MACRO
-	BYTE	0F3h, 0Fh, 0C7h
-ENDM
-
-vmx_off MACRO
-	BYTE	0Fh, 01h, 0C4h
-ENDM
-
-vmx_launch MACRO
-	BYTE	0Fh, 01h, 0C2h
-ENDM
-
-
-MODRM_EAX_06 MACRO   ;/* [EAX], with reg/opcode: /6 */
-	BYTE	030h
-ENDM
-
-MODRM_EAX_07 MACRO   ;/* [EAX], with reg/opcode: /7 */
-	BYTE	038h
-ENDM
-
-MODRM_EAX_ECX MACRO  ;/* [EAX], [ECX] */
-	BYTE	0C1h
-ENDM
-
-RPREFIX MACRO  
-	BYTE	048h
-ENDM
+EXTERN	 VmExitHandler:PROC
 
 HVM_SAVE_ALL_NOSEGREGS MACRO
         push r15
@@ -89,80 +44,10 @@ ENDM
 
 .CODE
 
-;void vmxPtrld(u64 addr)
-VmxPtrld PROC 
-	push rcx
-	mov rax,rsp
-	vmx_ptrld
-	MODRM_EAX_06
-	pop rcx
-	ret
-VmxPtrld ENDP
-
-;void vmxPtrst(u64 addr)
-VmxPtrst PROC 
-	push rcx
-	mov rax,rsp
-	vmx_ptrst
-	MODRM_EAX_07
-	pop rcx
-	ret
-VmxPtrst ENDP
-
-;void vmxClear(u64 addr)
-VmxClear PROC 
-	push rcx
-	mov rax,rsp
-	vmx_clear
-	MODRM_EAX_06
-	pop rcx
-	ret
-VmxClear ENDP
-
-; vmxRead( field)
-VmxRead PROC 
-	mov rax,rcx
-	vmx_read
-	MODRM_EAX_ECX  ;read value stored in ecx
-	mov rax,rcx    ;return value stored in eax, so pull ecx to eax
-	ret
-VmxRead ENDP
-
-;_vmxOff()
-VmxTurnOff PROC 
-	vmx_off
-	ret
-VmxTurnOff ENDP
-
-;void vmxOn(addr)
-VmxTurnOn PROC 
-	push rcx
-	mov rax,rsp
-	vmx_on
-	MODRM_EAX_06
-	pop rcx
-	ret
-VmxTurnOn ENDP
-
-
-VmxVmCall PROC 
-	mov rdx,rcx
-	vmcall
-	ret
-VmxVmCall ENDP
-
-
-;get_cr4()
-get_cr4 PROC 
-	mov rax,cr4
-	ret
-get_cr4 ENDP
-
-
 set_in_cr4 PROC 
 	mov rax,cr4
 	or  rcx,rax
-	mov cr4,rcx	
+	mov cr4,rcx
 	ret
 set_in_cr4 ENDP
 
@@ -170,9 +55,21 @@ clear_in_cr4 PROC
 	mov rax,cr4
 	not rcx
 	and rcx,rax
-	mov cr4,rcx	
+	mov cr4,rcx
 	ret
 clear_in_cr4 ENDP
+
+
+VmxRead PROC
+	vmread rax, rcx
+	ret
+VmxRead ENDP
+
+VmxVmCall PROC
+	vmcall
+	ret
+VmxVmCall ENDP
+
 
 ; Stack layout for vmxLaunch() call:
 ;
@@ -186,7 +83,7 @@ clear_in_cr4 ENDP
 
 ;====== VmxVMexitHandler ======
 
-VmxVMexitHandler PROC
+VmxVmexitHandler PROC   
 
 	HVM_SAVE_ALL_NOSEGREGS
 	
@@ -197,10 +94,10 @@ VmxVMexitHandler PROC
 	call	VmExitHandler
 	add	rsp, 28h
 	
-	HVM_RESTORE_ALL_NOSEGREGS
+	HVM_RESTORE_ALL_NOSEGREGS	
 	vmresume
 	ret
 
-VmxVMexitHandler ENDP
+VmxVmexitHandler ENDP
 
 END

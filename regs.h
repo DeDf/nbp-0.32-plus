@@ -5,8 +5,6 @@
 #pragma once
 #include <ntddk.h>
 
-ULONG64 RegGetTSC ();
-
 USHORT RegGetCs ();
 USHORT RegGetDs ();
 USHORT RegGetEs ();

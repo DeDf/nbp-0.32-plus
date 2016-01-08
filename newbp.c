@@ -2,7 +2,8 @@
  * Copyright holder: Invisible Things Lab
  */
 
-#include "newbp.h"
+#include <ntddk.h>
+#include "hvm.h"
 
 VOID
 DriverUnload (

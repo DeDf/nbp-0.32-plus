@@ -3,7 +3,6 @@
  */
 
 #include "hvm.h"
-#include "interrupts.h"
 
 ULONG g_uSubvertedCPUs;
 

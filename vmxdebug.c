@@ -56,8 +56,7 @@ VOID VmxDumpVmcs ()
   KdPrint (("GUEST_IA32_DEBUGCTL_HIGH 0x%X: 0x%llx\n", GUEST_IA32_DEBUGCTL_HIGH, VmxRead (GUEST_IA32_DEBUGCTL_HIGH)));
 
   KdPrint (("\n/*****32-bit Control Fields*****/\n"));
-  addr = PIN_BASED_VM_EXEC_CONTROL;
-  KdPrint (("PIN_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", addr, VmxRead (addr)));
+  KdPrint (("PIN_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", PIN_BASED_VM_EXEC_CONTROL, VmxRead (PIN_BASED_VM_EXEC_CONTROL)));
   addr = CPU_BASED_VM_EXEC_CONTROL;
   KdPrint (("CPU_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = EXCEPTION_BITMAP;
@@ -248,44 +247,4 @@ VOID VmxDumpVmcs ()
   KdPrint (("HOST_RSP 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = HOST_RIP;
   KdPrint (("HOST_RIP 0x%X: 0x%llx\n", addr, VmxRead (addr)));
-}
-
-static VOID DumpMemory (
-  PUCHAR Addr,
-  ULONG64 Len
-)
-{
-  ULONG64 i;
-  for (i = 0; i < Len; i++)
-  {
-    KdPrint (("%p 0x%x\n", Addr + i, *(Addr + i)));
-  }
-}
-
-VOID VmxCrash (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-)
-{
-  KdPrint (("!!!VMX CRASH!!!\n"));
-
-  KdPrint (("rax 0x%llX\n", GuestRegs->rax));
-  KdPrint (("rcx 0x%llX\n", GuestRegs->rcx));
-  KdPrint (("rdx 0x%llX\n", GuestRegs->rdx));
-  KdPrint (("rbx 0x%llX\n", GuestRegs->rbx));
-  KdPrint (("rsp 0x%llX\n", GuestRegs->rsp));
-  KdPrint (("rbp 0x%llX\n", GuestRegs->rbp));
-  KdPrint (("rsi 0x%llX\n", GuestRegs->rsi));
-  KdPrint (("rdi 0x%llX\n", GuestRegs->rdi));
-
-  KdPrint (("r8  0x%llX\n", GuestRegs->r8));
-  KdPrint (("r9  0x%llX\n", GuestRegs->r9));
-  KdPrint (("r10 0x%llX\n", GuestRegs->r10));
-  KdPrint (("r11 0x%llX\n", GuestRegs->r11));
-  KdPrint (("r12 0x%llX\n", GuestRegs->r12));
-  KdPrint (("r13 0x%llX\n", GuestRegs->r13));
-  KdPrint (("r14 0x%llX\n", GuestRegs->r14));
-  KdPrint (("r15 0x%llX\n", GuestRegs->r15));
-
-  while (1);
 }

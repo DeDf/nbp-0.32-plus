@@ -6,40 +6,34 @@
 
 extern ULONG g_uSubvertedCPUs;
 
-// UCHAR vmwrite(size_t CtlCode, size_t Value)
-// {
-//     //KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
-//     return __vmx_vmwrite(CtlCode, Value);
-// }
-
 /********************************************************************
   检测当前的处理器是否支持Vt
 ********************************************************************/
 BOOLEAN VmxIsImplemented ()
 {
-  ULONG32 eax, ebx, ecx, edx;
-  GetCpuIdInfo (0, &eax, &ebx, &ecx, &edx);
-  if (eax < 1)
-  {
-    KdPrint (("VmxIsImplemented(): Extended CPUID functions not implemented\n"));
-    return FALSE;
-  }
+    ULONG32 eax, ebx, ecx, edx;
+    GetCpuIdInfo (0, &eax, &ebx, &ecx, &edx);
+    if (eax < 1)
+    {
+        KdPrint (("VmxIsImplemented(): Extended CPUID functions not implemented\n"));
+        return FALSE;
+    }
 
-  if (!(ebx == 0x756e6547 && ecx == 0x6c65746e && edx == 0x49656e69))
-  {
-    KdPrint (("VmxIsImplemented(): Not an INTEL processor\n"));
-    return FALSE;
-  }
- 
-  GetCpuIdInfo (0x1, &eax, &ebx, &ecx, &edx);
-  return (ecx & (1<<5));
+    if (!(ebx == 0x756e6547 && ecx == 0x6c65746e && edx == 0x49656e69))
+    {
+        KdPrint (("VmxIsImplemented(): Not an INTEL processor\n"));
+        return FALSE;
+    }
+
+    GetCpuIdInfo (0x1, &eax, &ebx, &ecx, &edx);
+    return (ecx & (1<<5));
 }
 
 VOID
 VmExitHandler (
-               PCPU Cpu,
-               PGUEST_REGS GuestRegs
-               )
+  PCPU Cpu,
+  PGUEST_REGS GuestRegs
+)
 {
     ULONG64 ExitReason;
     ULONG_PTR GuestEIP;
@@ -61,14 +55,13 @@ VmExitHandler (
         ULONG32 fn, eax, ebx, ecx, edx;
 
         fn = (ULONG32) GuestRegs->rax;
-#ifdef BP_KNOCK
+
         if (fn == BP_KNOCK_EAX)
         {
             KdPrint (("Magic knock received: %x\n", BP_KNOCK_EAX));
             GuestRegs->rax = 0x68686868;
         }
         else
-#endif
         {
             ecx = (ULONG32) GuestRegs->rcx;
             GetCpuIdInfo (fn, &eax, &ebx, &ecx, &edx);
@@ -84,7 +77,29 @@ VmExitHandler (
     }
     else if (ExitReason == EXIT_REASON_VMCALL)
     {
-        HcDispatchHypercall(Cpu, GuestRegs);
+        ULONG32 HypercallNumber = (ULONG32) (GuestRegs->rcx & 0xffff);
+
+        switch (HypercallNumber)
+        {
+        case NBP_HYPERCALL_UNLOAD:
+
+            GuestRegs->rcx = NBP_MAGIC;
+            GuestRegs->rdx = 0;
+
+            // disable virtualization, resume guest, don't setup time bomb
+            VmxShutdown (Cpu, GuestRegs);
+
+            // never returns
+            KdPrint (("HcDispatchHypercall(): ArchShutdown() returned\n"));
+            break;
+
+        default:
+            KdPrint (("HcDispatchHypercall(): Unsupported hypercall 0x%04X\n", HypercallNumber));
+            break;
+        }
+
+        GuestRegs->rcx = NBP_MAGIC;
+        GuestRegs->rdx = 0;
     }
     else if (ExitReason >= EXIT_REASON_VMCLEAR && ExitReason <= EXIT_REASON_VMXON)
     {
@@ -181,41 +196,7 @@ VmExitHandler (
     __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
 }
 
-static VOID NTAPI VmxDispatchNestedEvent (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-)
-{
-  NTSTATUS Status;
-  BOOLEAN bInterceptedByGuest;
-  ULONG64 Exitcode;
-
-  if (!Cpu || !GuestRegs)
-    return;
-
-  _KdPrint (("VmxDispatchNestedEvent(): DUMMY!!! This build doesn't support nested virtualization!\n"));
-
-}
-
-static BOOLEAN NTAPI VmxIsNestedEvent (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs
-)
-{
-  return FALSE;                 // DUMMY!!! This build doesn't support nested virtualization!!!
-}
-
-static VOID NTAPI VmxAdjustRip (
-  PCPU Cpu,
-  PGUEST_REGS GuestRegs,
-  ULONG64 Delta
-)
-{
-  __vmx_vmwrite (GUEST_RIP, VmxRead (GUEST_RIP) + Delta);
-  return;
-}
-
-static ULONG32 NTAPI VmxAdjustControls (
+static ULONG32  VmxAdjustControls (
   ULONG32 Ctl,
   ULONG32 Msr
 )
@@ -228,7 +209,7 @@ static ULONG32 NTAPI VmxAdjustControls (
   return Ctl;
 }
 
-NTSTATUS NTAPI VmxFillGuestSelectorData (
+NTSTATUS  VmxFillGuestSelectorData (
   PVOID GdtBase,
   ULONG Segreg,
   USHORT Selector
@@ -263,11 +244,8 @@ NTSTATUS VmxSetupVMCS (
   SEGMENT_SELECTOR SegmentSelector;
   PVOID GdtBase = (PVOID) GetGdtBase ();
 
-  if (!Cpu->Vmx.OriginalVmcs)
-    return STATUS_INVALID_PARAMETER;
-
-  __vmx_vmclear (&Cpu->Vmx.VMCS_PA);  // 取消当前的VMCS的激活状态
-  __vmx_vmptrld (&Cpu->Vmx.VMCS_PA);  // 加载新的VMCS并设为激活状态
+  __vmx_vmclear (&Cpu->VMCS_PA);  // 取消当前的VMCS的激活状态
+  __vmx_vmptrld (&Cpu->VMCS_PA);  // 加载新的VMCS并设为激活状态
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
@@ -359,26 +337,22 @@ NTSTATUS VmxSetupVMCS (
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
   __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
-  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVMexitHandler);
-
-  _KdPrint (("VmxSetupVMCS(): Exit\n"));
+  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
 
   return STATUS_SUCCESS;
 }
 
-// #define VmxWrite __vmx_vmwrite
-// #define MsrRead  __readmsr
-// #define RegGetCr0 __readcr0
-// #define RegGetCr3 __readcr3
-// #define RegGetCr4 __readcr4
-// #define GUEST_INTERRUPTIBILITY_INFO GUEST_INTERRUPTIBILITY_STATE
-
-NTSTATUS NTAPI VmxInitialize (
+NTSTATUS
+VmxInitialize (
   PCPU Cpu,
   PVOID GuestRip,
   PVOID GuestRsp
 )
 {
+    PHYSICAL_ADDRESS HighestAcceptableAddress;
+
+    HighestAcceptableAddress.QuadPart = -1;
+
     // 检查IA32_FEATURE_CONTROL寄存器的Lock位
     if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
     {
@@ -396,7 +370,7 @@ NTSTATUS NTAPI VmxInitialize (
     //
     // 为VMXON结构分配空间 (Allocate VMXON region)
     //
-    Cpu->OriginaVmxonR = MmAllocateNonCachedMemory(PAGE_SIZE);
+    Cpu->OriginaVmxonR = MmAllocateContiguousMemory(PAGE_SIZE, HighestAcceptableAddress);
     if (!Cpu->OriginaVmxonR)
     {
         KdPrint (("VmxInitialize(): Failed to allocate memory for original VMXON\n"));
@@ -408,7 +382,7 @@ NTSTATUS NTAPI VmxInitialize (
     //
     // 为VMCS结构分配空间 (Allocate VMCS)
     //
-    Cpu->OriginalVmcs = MmAllocateNonCachedMemory(PAGE_SIZE);
+    Cpu->OriginalVmcs = MmAllocateContiguousMemory(PAGE_SIZE, HighestAcceptableAddress);
     if (!Cpu->OriginalVmcs)
     {
         KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
@@ -423,21 +397,20 @@ NTSTATUS NTAPI VmxInitialize (
 
     if (__vmx_on (&Cpu->OriginalVmxonRPA))
     {
-        _KdPrint (("VmxOn Failed!\n"));
+        KdPrint (("VmxOn Failed!\n"));
         return STATUS_UNSUCCESSFUL;
     }
 
     //============================= 配置VMCS ================================
-
     if ( VmxSetupVMCS (Cpu, GuestRip, GuestRsp) )
     {
         KdPrint (("VmxSetupVMCS() failed!"));
-        __vmx_vmoff ();
+        __vmx_off ();
         clear_in_cr4 (X86_CR4_VMXE);
         return STATUS_UNSUCCESSFUL;
     }
 
-    return STATUS_SUCCESS;
+  return STATUS_SUCCESS;
 }
 
 static VOID VmxGenerateTrampolineToGuest (
@@ -449,30 +422,24 @@ static VOID VmxGenerateTrampolineToGuest (
   ULONG uTrampolineSize = 0;
   ULONG64 NewRsp;
 
-  if (!Cpu || !GuestRegs)
-    return;
-
   // assume Trampoline buffer is big enough
   __vmx_vmwrite (GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & ~0x100);     // disable TF
 
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RCX, GuestRegs->rcx);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RDX, GuestRegs->rdx);
-
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RBX, GuestRegs->rbx);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RBP, GuestRegs->rbp);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RSI, GuestRegs->rsi);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RDI, GuestRegs->rdi);
 
-#ifndef _X86_
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R8, GuestRegs->r8);
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R9, GuestRegs->r9);
+  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R8,  GuestRegs->r8);
+  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R9,  GuestRegs->r9);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R10, GuestRegs->r10);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R11, GuestRegs->r11);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R12, GuestRegs->r12);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R13, GuestRegs->r13);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R14, GuestRegs->r14);
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_R15, GuestRegs->r15);
-#endif
 
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_CR0, VmxRead (GUEST_CR0));
   CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_CR3, VmxRead (GUEST_CR3));
@@ -489,52 +456,19 @@ static VOID VmxGenerateTrampolineToGuest (
   // [TOS+0x18]   rsp
   // [TOS+0x20]   ss
 
-  // construct stack frame for IRETD:
-  // [TOS]        rip
-  // [TOS+0x4]    cs
-  // [TOS+0x8]    rflags
-
-#ifndef _X86_
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_SS_SELECTOR));
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_SS_SELECTOR));
   CmGeneratePushReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX);
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, NewRsp);
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, NewRsp);
   CmGeneratePushReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX);
-#endif
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_RFLAGS));
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_RFLAGS));
   CmGeneratePushReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX);
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_CS_SELECTOR));
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_CS_SELECTOR));
   CmGeneratePushReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX);
-
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX,
-                    VmxRead (GUEST_RIP) + VmxRead (VM_EXIT_INSTRUCTION_LEN));
-
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, VmxRead (GUEST_RIP) + VmxRead (VM_EXIT_INSTRUCTION_LEN));
   CmGeneratePushReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX);
+  CmGenerateMovReg  (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, GuestRegs->rax);
 
-  CmGenerateMovReg (&Trampoline[uTrampolineSize], &uTrampolineSize, REG_RAX, GuestRegs->rax);
-
-#ifdef _X86_
-  CmGenerateIretd (&Trampoline[uTrampolineSize], &uTrampolineSize);
-#else
   CmGenerateIretq (&Trampoline[uTrampolineSize], &uTrampolineSize);
-#endif
-
-  // restore old GDTR
-  CmReloadGdtr ((PVOID) VmxRead (GUEST_GDTR_BASE), (ULONG) VmxRead (GUEST_GDTR_LIMIT));
-
-  __writemsr (MSR_GS_BASE, VmxRead (GUEST_GS_BASE));
-  __writemsr (MSR_FS_BASE, VmxRead (GUEST_FS_BASE));
-
-  // FIXME???
-  // restore ds, es
-//      CmSetDS((USHORT)VmxRead(GUEST_DS_SELECTOR));
-//      CmSetES((USHORT)VmxRead(GUEST_ES_SELECTOR));
-
-  // cs and ss must be the same with the guest OS in this implementation
-
-  // restore old IDTR
-  CmReloadIdtr ((PVOID) VmxRead (GUEST_IDTR_BASE), (ULONG) VmxRead (GUEST_IDTR_LIMIT));
-
-  return;
 }
 
 NTSTATUS VmxShutdown (
@@ -551,7 +485,8 @@ NTSTATUS VmxShutdown (
 
   __vmx_off ();
   clear_in_cr4 (X86_CR4_VMXE);
-  ((VOID (*)()) & Trampoline) ();
+
+  ((VOID (*)()) &Trampoline) ();
 
   // never returns
   return STATUS_SUCCESS;

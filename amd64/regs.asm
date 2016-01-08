@@ -1,14 +1,6 @@
 
 .CODE
 
-RegGetTSC PROC
-	rdtsc
-	shl		rdx, 32
-	or		rax, rdx
-	ret
-RegGetTSC ENDP
-
-
 RegGetCs PROC
 	mov		rax, cs
 	ret
