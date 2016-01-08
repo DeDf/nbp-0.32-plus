@@ -3,7 +3,6 @@
  */
 
 #include "hvm.h"
-#include "hypercalls.h"
 #include "interrupts.h"
 
 ULONG g_uSubvertedCPUs;
@@ -40,7 +39,7 @@ NTSTATUS HvmSubvertCpu (
   // 准备VM要用到的数据结构 (VMXON & VMCS )
   // GuestRip和GuestRsp会被填进VMCS结构，代表Guest原本的代码位置和栈顶指针
   //
-  Status = VmxInitialize (Cpu, CmResumeGuest, GuestRsp);
+  Status = VmxInitialize (Cpu, CmGuestEip, GuestRsp);
   if ( Status )
   {
       KdPrint (("HvmSubvertCpu(): VmxInitialize Failed! status 0x%08hX\n", Status));
@@ -72,7 +71,6 @@ HvmSpitOutBluepill ()
         VmxVmCall (NBP_HYPERCALL_UNLOAD);
 
         KeLowerIrql (OldIrql);
-        clear_in_cr4 (X86_CR4_VMXE);
         KeRevertToUserAffinityThread ();
     }
 

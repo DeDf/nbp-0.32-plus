@@ -7,7 +7,6 @@
 #include <ntddk.h>
 #include "common.h"
 #include "vmx.h"
-#include "msr.h"
 #include "regs.h"
 #include "interrupts.h"
 

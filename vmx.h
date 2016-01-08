@@ -177,9 +177,6 @@ enum SEGREGS
 #define MSR_GS_BASE         0xc0000101        /* 64bit GS base */
 #define MSR_SHADOW_GS_BASE  0xc0000102        /* SwapGS GS shadow */ 
 
-ULONG64 get_cr4 (
-);
-
 VOID set_in_cr4 (
   ULONG32 mask
 );
@@ -195,29 +192,9 @@ VOID VmxVmCall (
   ULONG32 HypercallNumber
 );
 
-VOID VmxPtrld (
-  PHYSICAL_ADDRESS VmcsPA
-);
-
-VOID VmxPtrst (
-  PHYSICAL_ADDRESS VmcsPA
-);
-
-VOID VmxClear (
-  PHYSICAL_ADDRESS VmcsPA
-);
-
 ULONG64 VmxRead (
   ULONG64 field
 );
-
-VOID VmxTurnOff ();
-
-VOID VmxTurnOn (
-  PHYSICAL_ADDRESS VmxonPA
-);
-
-VOID VmxResume ();
 
 VOID VmxVMexitHandler (
   VOID
@@ -264,10 +241,6 @@ NTSTATUS VmxShutdown (
 
 NTSTATUS VmxVirtualize (
   PCPU Cpu
-);
-
-BOOLEAN VmxIsTrapVaild (
-  ULONG TrappedVmExit
 );
 
 NTSTATUS VmxFillGuestSelectorData (

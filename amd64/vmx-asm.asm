@@ -4,11 +4,6 @@
 
 EXTERN	VmExitHandler:PROC  
 
-
-vmx_call MACRO
-	BYTE	0Fh, 01h, 0C1h
-ENDM
-
 vmx_clear MACRO
 	BYTE	066h, 0Fh, 0C7h
 ENDM
@@ -31,10 +26,6 @@ ENDM
 
 vmx_off MACRO
 	BYTE	0Fh, 01h, 0C4h
-ENDM
-
-vmx_resume MACRO
-	BYTE	0Fh, 01h, 0C3h
 ENDM
 
 vmx_launch MACRO
@@ -153,10 +144,10 @@ VmxTurnOn PROC
 	ret
 VmxTurnOn ENDP
 
-;vmxVmCall(HypercallNumber)
+
 VmxVmCall PROC 
 	mov rdx,rcx
-	vmx_call
+	vmcall
 	ret
 VmxVmCall ENDP
 
@@ -168,7 +159,6 @@ get_cr4 PROC
 get_cr4 ENDP
 
 
-; void set_in_cr4(mask)
 set_in_cr4 PROC 
 	mov rax,cr4
 	or  rcx,rax
@@ -176,7 +166,6 @@ set_in_cr4 PROC
 	ret
 set_in_cr4 ENDP
 
-; void clear_in_cr4(mask)
 clear_in_cr4 PROC 
 	mov rax,cr4
 	not rcx
@@ -195,11 +184,6 @@ clear_in_cr4 ENDP
 ; |         struct CPU           |
 ; --------------------------------
 
-VmxResume PROC 	
-	vmx_resume
-	ret
-VmxResume ENDP
-
 ;====== VmxVMexitHandler ======
 
 VmxVMexitHandler PROC
@@ -214,7 +198,7 @@ VmxVMexitHandler PROC
 	add	rsp, 28h
 	
 	HVM_RESTORE_ALL_NOSEGREGS
-	vmx_resume
+	vmresume
 	ret
 
 VmxVMexitHandler ENDP

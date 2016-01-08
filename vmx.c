@@ -3,17 +3,14 @@
  */
 
 #include "vmx.h"
-#include "cpuid.h"
-#include "hypercalls.h"
 
-ULONG64 g_HostStackBaseAddress;
 extern ULONG g_uSubvertedCPUs;
 
-UCHAR vmwrite(size_t CtlCode, size_t Value)
-{
-    //KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
-    return __vmx_vmwrite(CtlCode, Value);
-}
+// UCHAR vmwrite(size_t CtlCode, size_t Value)
+// {
+//     //KdPrint(("vmwrite %llx, %llx\n", CtlCode, Value));
+//     return __vmx_vmwrite(CtlCode, Value);
+// }
 
 /********************************************************************
   检测当前的处理器是否支持Vt
@@ -35,7 +32,7 @@ BOOLEAN VmxIsImplemented ()
   }
  
   GetCpuIdInfo (0x1, &eax, &ebx, &ecx, &edx);
-  return CmIsBitSet (ecx, 5);
+  return (ecx & (1<<5));
 }
 
 VOID
@@ -173,7 +170,7 @@ VmExitHandler (
             __vmx_vmwrite (GUEST_FS_BASE, MsrValue.QuadPart);
             break;
         default:
-            MsrWrite (ecx, MsrValue.QuadPart);
+            __writemsr (ecx, MsrValue.QuadPart);
         }
     }
     else
@@ -246,13 +243,13 @@ NTSTATUS NTAPI VmxFillGuestSelectorData (
   if (!Selector)
     uAccessRights |= 0x10000;
 
-  vmwrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
-  vmwrite (GUEST_ES_LIMIT    + Segreg * 2, SegmentSelector.limit);
-  vmwrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
+  __vmx_vmwrite (GUEST_ES_SELECTOR + Segreg * 2, Selector);
+  __vmx_vmwrite (GUEST_ES_LIMIT    + Segreg * 2, SegmentSelector.limit);
+  __vmx_vmwrite (GUEST_ES_AR_BYTES + Segreg * 2, uAccessRights);
 
   if ((Segreg == LDTR) || (Segreg == TR))
     // don't setup for FS/GS - their bases are stored in MSR values
-    vmwrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
+    __vmx_vmwrite (GUEST_ES_BASE + Segreg * 2, SegmentSelector.base);
 
   return STATUS_SUCCESS;
 }
@@ -274,56 +271,56 @@ NTSTATUS VmxSetupVMCS (
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
-  vmwrite (VMCS_LINK_POINTER,      0xffffffff);
-  vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
+  __vmx_vmwrite (VMCS_LINK_POINTER,      0xffffffff);
+  __vmx_vmwrite (VMCS_LINK_POINTER_HIGH, 0xffffffff);
 
   /*32BIT Control Fields. */  //disable Vmexit by Extern-interrupt,NMI and Virtual NMI
-  vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
-  vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PROCBASED_CTLS));
-  vmwrite (EXCEPTION_BITMAP, 0);
-  vmwrite (VM_EXIT_CONTROLS,
+  __vmx_vmwrite (PIN_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PINBASED_CTLS));
+  __vmx_vmwrite (CPU_BASED_VM_EXEC_CONTROL, VmxAdjustControls (0, MSR_IA32_VMX_PROCBASED_CTLS));
+  __vmx_vmwrite (EXCEPTION_BITMAP, 0);
+  __vmx_vmwrite (VM_EXIT_CONTROLS,
             VmxAdjustControls (VM_EXIT_IA32E_MODE | VM_EXIT_ACK_INTR_ON_EXIT, MSR_IA32_VMX_EXIT_CTLS));
-  vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
+  __vmx_vmwrite (VM_ENTRY_CONTROLS, VmxAdjustControls (VM_ENTRY_IA32E_MODE, MSR_IA32_VMX_ENTRY_CTLS));
 
-  vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
-  vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
-  vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
-  vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
-  vmwrite (GUEST_ACTIVITY_STATE,    0);   // 处于正常执行指令状态         
+  __vmx_vmwrite (VM_EXIT_MSR_STORE_COUNT, 0);
+  __vmx_vmwrite (VM_EXIT_MSR_LOAD_COUNT,  0);
+  __vmx_vmwrite (VM_ENTRY_MSR_LOAD_COUNT, 0);
+  __vmx_vmwrite (VM_ENTRY_INTR_INFO_FIELD,0);
+  __vmx_vmwrite (GUEST_ACTIVITY_STATE,    0);   // 处于正常执行指令状态         
   
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
   // SetCRx()
-  vmwrite (CR0_GUEST_HOST_MASK, 0);            // disable vmexit 0f mov to cr0 all
-  vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); // disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
-  vmwrite (CR4_READ_SHADOW, __readcr4() & ~X86_CR4_VMXE);  // Cr4寄存器SHADOW里去掉X86_CR4_VMXE
+  __vmx_vmwrite (CR0_GUEST_HOST_MASK, 0);            // disable vmexit 0f mov to cr0 all
+  __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); // disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  __vmx_vmwrite (CR4_READ_SHADOW, __readcr4() & ~X86_CR4_VMXE);  // Cr4寄存器SHADOW里去掉X86_CR4_VMXE
   //
-  vmwrite (GUEST_CR0, __readcr0 ());
-  vmwrite (GUEST_CR3, __readcr3 ());
-  vmwrite (GUEST_CR4, __readcr4 ());
-  vmwrite (GUEST_DR7, 0x400);
+  __vmx_vmwrite (GUEST_CR0, __readcr0 ());
+  __vmx_vmwrite (GUEST_CR3, __readcr3 ());
+  __vmx_vmwrite (GUEST_CR4, __readcr4 ());
+  __vmx_vmwrite (GUEST_DR7, 0x400);
   //
-  vmwrite (HOST_CR0, __readcr0 ());
-  vmwrite (HOST_CR3, __readcr3 ());
-  vmwrite (HOST_CR4, __readcr4 ());
+  __vmx_vmwrite (HOST_CR0, __readcr0 ());
+  __vmx_vmwrite (HOST_CR3, __readcr3 ());
+  __vmx_vmwrite (HOST_CR4, __readcr4 ());
 
   // SetDT()
-  vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
-  vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
-  vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
-  vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
+  __vmx_vmwrite (GUEST_GDTR_LIMIT, GetGdtLimit ());
+  __vmx_vmwrite (GUEST_IDTR_LIMIT, GetIdtLimit ());
+  __vmx_vmwrite (GUEST_GDTR_BASE, (ULONG64) GdtBase);
+  __vmx_vmwrite (GUEST_IDTR_BASE, GetIdtBase ());
   //
-  vmwrite (HOST_GDTR_BASE, (ULONG64) GdtBase);
-  vmwrite (HOST_IDTR_BASE, (ULONG64) GetIdtBase ());
+  __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) GdtBase);
+  __vmx_vmwrite (HOST_IDTR_BASE, (ULONG64) GetIdtBase ());
 
   // SetSysCall()
-  vmwrite (GUEST_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (GUEST_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
+  __vmx_vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
   //
-  vmwrite (HOST_IA32_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
+  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
 
   // SetSegSelectors()
   VmxFillGuestSelectorData (GdtBase, ES, RegGetEs ());
@@ -335,34 +332,34 @@ NTSTATUS VmxSetupVMCS (
   VmxFillGuestSelectorData (GdtBase, LDTR, GetLdtr ());
   VmxFillGuestSelectorData (GdtBase, TR, GetTrSelector ());
   //
-  vmwrite (GUEST_ES_BASE, 0);
-  vmwrite (GUEST_CS_BASE, 0);
-  vmwrite (GUEST_SS_BASE, 0);
-  vmwrite (GUEST_DS_BASE, 0);
-  vmwrite (GUEST_FS_BASE, __readmsr (MSR_FS_BASE));
-  vmwrite (GUEST_GS_BASE, __readmsr (MSR_GS_BASE));
+  __vmx_vmwrite (GUEST_ES_BASE, 0);
+  __vmx_vmwrite (GUEST_CS_BASE, 0);
+  __vmx_vmwrite (GUEST_SS_BASE, 0);
+  __vmx_vmwrite (GUEST_DS_BASE, 0);
+  __vmx_vmwrite (GUEST_FS_BASE, __readmsr (MSR_FS_BASE));
+  __vmx_vmwrite (GUEST_GS_BASE, __readmsr (MSR_GS_BASE));
   //
-  vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
-  vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
-  vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
-  vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
-  vmwrite (HOST_FS_SELECTOR, RegGetFs () & 0xf8);
-  vmwrite (HOST_GS_SELECTOR, RegGetGs () & 0xf8);
-  vmwrite (HOST_TR_SELECTOR, GetTrSelector () & 0xf8);
+  __vmx_vmwrite (HOST_CS_SELECTOR, BP_GDT64_CODE);
+  __vmx_vmwrite (HOST_DS_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_ES_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_SS_SELECTOR, BP_GDT64_DATA);
+  __vmx_vmwrite (HOST_FS_SELECTOR, RegGetFs () & 0xf8);
+  __vmx_vmwrite (HOST_GS_SELECTOR, RegGetGs () & 0xf8);
+  __vmx_vmwrite (HOST_TR_SELECTOR, GetTrSelector () & 0xf8);
   //
-  vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
-  vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
+  __vmx_vmwrite (HOST_FS_BASE, __readmsr (MSR_FS_BASE));
+  __vmx_vmwrite (HOST_GS_BASE, __readmsr (MSR_GS_BASE));
   CmInitializeSegmentSelector (&SegmentSelector, GetTrSelector (), GdtBase);
-  vmwrite (HOST_TR_BASE, SegmentSelector.base);
+  __vmx_vmwrite (HOST_TR_BASE, SegmentSelector.base);
 
   /////////////////////////////////////////////////////////////////////////////
-  vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
-  vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip : common-asm CmResumeGuest
-  vmwrite (GUEST_RFLAGS, RegGetRflags ());
+  __vmx_vmwrite (GUEST_RSP, (ULONG64) GuestRsp);     //setup guest sp
+  __vmx_vmwrite (GUEST_RIP, (ULONG64) GuestRip);     //setup guest ip : common-asm CmResumeGuest
+  __vmx_vmwrite (GUEST_RFLAGS, RegGetRflags ());
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
-  vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
-  vmwrite (HOST_RIP, (ULONG64) VmxVMexitHandler);
+  __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
+  __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVMexitHandler);
 
   _KdPrint (("VmxSetupVMCS(): Exit\n"));
 
@@ -435,7 +432,7 @@ NTSTATUS NTAPI VmxInitialize (
     if ( VmxSetupVMCS (Cpu, GuestRip, GuestRsp) )
     {
         KdPrint (("VmxSetupVMCS() failed!"));
-        VmxTurnOff ();
+        __vmx_vmoff ();
         clear_in_cr4 (X86_CR4_VMXE);
         return STATUS_UNSUCCESSFUL;
     }
@@ -524,8 +521,8 @@ static VOID VmxGenerateTrampolineToGuest (
   // restore old GDTR
   CmReloadGdtr ((PVOID) VmxRead (GUEST_GDTR_BASE), (ULONG) VmxRead (GUEST_GDTR_LIMIT));
 
-  MsrWrite (MSR_GS_BASE, VmxRead (GUEST_GS_BASE));
-  MsrWrite (MSR_FS_BASE, VmxRead (GUEST_FS_BASE));
+  __writemsr (MSR_GS_BASE, VmxRead (GUEST_GS_BASE));
+  __writemsr (MSR_FS_BASE, VmxRead (GUEST_FS_BASE));
 
   // FIXME???
   // restore ds, es
@@ -540,37 +537,22 @@ static VOID VmxGenerateTrampolineToGuest (
   return;
 }
 
-static NTSTATUS NTAPI VmxShutdown (
+NTSTATUS VmxShutdown (
   PCPU Cpu,
   PGUEST_REGS GuestRegs
 )
 {
   UCHAR Trampoline[0x600];
 
-  _KdPrint (("VmxShutdown(): CPU#%d\n", Cpu->ProcessorNumber));
-
-#if DEBUG_LEVEL>2
-  VmxDumpVmcs ();
-#endif
   InterlockedDecrement (&g_uSubvertedCPUs);
 
   // The code should be updated to build an approproate trampoline to exit to any guest mode.
   VmxGenerateTrampolineToGuest (Cpu, GuestRegs, Trampoline);
 
-  _KdPrint (("VmxShutdown(): Trampoline generated\n", Cpu->ProcessorNumber));
-  VmxTurnOff ();
+  __vmx_off ();
   clear_in_cr4 (X86_CR4_VMXE);
   ((VOID (*)()) & Trampoline) ();
 
   // never returns
   return STATUS_SUCCESS;
-}
-
-static BOOLEAN NTAPI VmxIsTrapVaild (
-  ULONG TrappedVmExit
-)
-{
-  if (TrappedVmExit > VMX_MAX_GUEST_VMEXIT)
-    return FALSE;
-  return TRUE;
 }

@@ -58,27 +58,6 @@ NTSTATUS NTAPI CmGetPagePTEAddress (
   return STATUS_SUCCESS;
 }
 
-NTSTATUS NTAPI CmPatchPTEPhysicalAddress (
-  PULONG64 pPte,
-  PVOID PageVA,
-  PHYSICAL_ADDRESS NewPhysicalAddress
-)
-{
-  ULONG64 Pte;
-
-  if (!pPte || !PageVA)
-    return STATUS_INVALID_PARAMETER;
-
-  Pte = *pPte;
-  Pte &= 0xfff0000000000fff;
-  Pte |= NewPhysicalAddress.QuadPart & 0xffffffffff000;
-  *pPte = Pte;
-
-  CmInvalidatePage (PageVA);
-
-  return STATUS_SUCCESS;
-}
-
 NTSTATUS NTAPI CmDumpGdt (
   PUCHAR GdtBase,
   USHORT GdtLimit

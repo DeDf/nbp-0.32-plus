@@ -5,12 +5,12 @@
 #pragma once
 
 #include <ntddk.h>
-#include "paging.h"
-#include "comprint.h"
 
 // ---------------- GENERAL CONFIG (both SVM & VMX) ------------------------  
 
 #define MEM_TAG	'LTI'
+#define NBP_MAGIC ((ULONG32)'!LTI')
+#define NBP_HYPERCALL_UNLOAD			0x1
 
 // DEBUG settings -------------
 #define	ENABLE_DEBUG_PRINTS
@@ -70,8 +70,6 @@
 #undef _KdPrint
 
 #ifdef ENABLE_DEBUG_PRINTS
-# define _KdPrint(x) {} // ComPrint x
-#else
 # define _KdPrint(x) {}
 #endif
 
@@ -335,12 +333,6 @@ typedef struct _GUEST_REGS
 
 typedef ULONG BPSPIN_LOCK, *PBPSPIN_LOCK;
 
-NTSTATUS NTAPI CmPatchPTEPhysicalAddress (
-  PULONG64 pPte,
-  PVOID PageVA,
-  PHYSICAL_ADDRESS NewPhysicalAddress
-);
-
 NTSTATUS NTAPI CmGetPagePTEAddress (
   PVOID Page,
   PULONG64 * pPagePTE,
@@ -444,7 +436,7 @@ NTSTATUS NTAPI CmSubvert (
   PVOID
 );
 
-NTSTATUS NTAPI CmResumeGuest (
+NTSTATUS NTAPI CmGuestEip (
   PVOID
 );
 
@@ -556,4 +548,11 @@ NTSTATUS NTAPI NtDeviceIoControlFile (
   IN ULONG OutputBufferLength
 );
 
+VOID GetCpuIdInfo (
+                   ULONG32 fn,
+                   OUT PULONG32 ret_eax,
+                   OUT PULONG32 ret_ebx,
+                   OUT PULONG32 ret_ecx,
+                   OUT PULONG32 ret_edx
+                   );
 

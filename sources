@@ -1,0 +1,16 @@
+TARGETNAME=newbp
+TARGETPATH=obj
+TARGETTYPE=DRIVER
+
+SOURCES=\
+    newbp.c \
+    hvm.c \
+    common.c \
+    vmx.c \
+    vmxdebug.c
+
+AMD64_SOURCES=\
+    vmx-asm.asm \
+    common-asm.asm \
+    regs.asm
+
