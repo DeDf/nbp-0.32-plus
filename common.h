@@ -94,15 +94,9 @@ typedef struct
 
 typedef struct _CPU
 {
-    struct _CPU *SelfPointer;             // MUST go first in the structure; refer to interrupt handlers for details
-
-    PHYSICAL_ADDRESS VMCS_PA;       // MUST go first in the structure; refer to SvmVmrun() for details
-    PVOID OriginalVmcs;             // VMCS which was originally built by the BP for the guest OS
-    PHYSICAL_ADDRESS OriginalVmxonRPA;    // Vmxon Region which was originally built by the BP for the guest OS
-    PVOID OriginaVmxonR;
-
-    ULONG ProcessorNumber;
-    PVOID HostStack;
+    PVOID OriginalVmcs;    // VMCS结构，每个guest OS 一个
+    PVOID OriginaVmxonR;   // Vmxon结构，每个CPU核心一个
+    PVOID VMM_Stack;       // VMM栈
 
 } CPU, *PCPU;
 
@@ -157,10 +151,6 @@ NTSTATUS  CmGenerateIretq (
                            PUCHAR pCode,
                            PULONG pGeneratedCodeLength
                            );
-
-NTSTATUS  CmSubvert (
-  PVOID
-);
 
 VOID GetCpuIdInfo (
                    ULONG32 fn,

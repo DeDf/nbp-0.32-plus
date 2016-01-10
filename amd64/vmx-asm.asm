@@ -86,9 +86,8 @@ VmxVmCall ENDP
 VmxVmexitHandler PROC   
 
 	HVM_SAVE_ALL_NOSEGREGS
-	
-	mov     rcx, [rsp + 80h] ;PCPU
-	mov 	rdx, rsp		 ;GuestRegs
+
+	mov 	rcx, rsp		 ;GuestRegs
 	
 	sub	rsp, 28h
 	call	VmExitHandler

@@ -31,7 +31,6 @@ BOOLEAN VmxIsImplemented ()
 
 VOID
 VmExitHandler (
-  PCPU Cpu,
   PGUEST_REGS GuestRegs
 )
 {
@@ -40,7 +39,7 @@ VmExitHandler (
     ULONG_PTR inst_len;
     BOOLEAN WillBeAlsoHandledByGuestHv = FALSE;
 
-    if (!Cpu || !GuestRegs)
+    if (!GuestRegs)
         return;
 
     __vmx_vmread(VM_EXIT_REASON, &ExitReason);
@@ -87,7 +86,7 @@ VmExitHandler (
             GuestRegs->rdx = 0;
 
             // disable virtualization, resume guest, don't setup time bomb
-            VmxShutdown (Cpu, GuestRegs);
+            VmxShutdown (GuestRegs);
 
             // never returns
             KdPrint (("HcDispatchHypercall(): ArchShutdown() returned\n"));
@@ -236,16 +235,13 @@ NTSTATUS  VmxFillGuestSelectorData (
 }
 
 NTSTATUS VmxSetupVMCS (
-  PCPU Cpu,
+  ULONG_PTR VMM_Stack,
   PVOID GuestRip,
   PVOID GuestRsp
 )
 {
   SEGMENT_SELECTOR SegmentSelector;
   PVOID GdtBase = (PVOID) GetGdtBase ();
-
-  __vmx_vmclear (&Cpu->VMCS_PA);  // 取消当前的VMCS的激活状态
-  __vmx_vmptrld (&Cpu->VMCS_PA);  // 加载新的VMCS并设为激活状态
 
   /////////////////////////////////////////////////////////////////////////////
   /*64BIT Guest-Statel Fields. */
@@ -336,85 +332,13 @@ NTSTATUS VmxSetupVMCS (
   __vmx_vmwrite (GUEST_RFLAGS, RegGetRflags ());
 
   // HOST_RSP与HOST_RIP决定进入VMM的地址
-  __vmx_vmwrite (HOST_RSP, (ULONG64) Cpu);   //setup host sp at vmxLaunch(...)
+  __vmx_vmwrite (HOST_RSP, VMM_Stack);
   __vmx_vmwrite (HOST_RIP, (ULONG64) VmxVmexitHandler);
 
   return STATUS_SUCCESS;
 }
 
-NTSTATUS
-VmxInitialize (
-  PCPU Cpu,
-  PVOID GuestRip,
-  PVOID GuestRsp
-)
-{
-    PHYSICAL_ADDRESS HighestAcceptableAddress;
-
-    HighestAcceptableAddress.QuadPart = -1;
-
-    // 检查IA32_FEATURE_CONTROL寄存器的Lock位
-    if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_LOCKED))
-    {
-        KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[0] = 0!\n"));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    // 检查IA32_FEATURE_CONTROL寄存器的Enable VMX outside SMX位
-    if (!(__readmsr(MSR_IA32_FEATURE_CONTROL) & FEATURE_CONTROL_VMXON_ENABLED))
-    {
-        KdPrint(("VmxInitialize() IA32_FEATURE_CONTROL bit[2] = 0!\n"));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    //
-    // 为VMXON结构分配空间 (Allocate VMXON region)
-    //
-    Cpu->OriginaVmxonR = MmAllocateContiguousMemory(PAGE_SIZE, HighestAcceptableAddress);
-    if (!Cpu->OriginaVmxonR)
-    {
-        KdPrint (("VmxInitialize(): Failed to allocate memory for original VMXON\n"));
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    RtlZeroMemory (Cpu->OriginaVmxonR, PAGE_SIZE);
-    Cpu->OriginalVmxonRPA = MmGetPhysicalAddress(Cpu->OriginaVmxonR);
-
-    //
-    // 为VMCS结构分配空间 (Allocate VMCS)
-    //
-    Cpu->OriginalVmcs = MmAllocateContiguousMemory(PAGE_SIZE, HighestAcceptableAddress);
-    if (!Cpu->OriginalVmcs)
-    {
-        KdPrint (("VmxInitialize(): Failed to allocate memory for original VMCS\n"));
-        return STATUS_INSUFFICIENT_RESOURCES;
-    }
-    RtlZeroMemory (Cpu->OriginalVmcs, PAGE_SIZE);
-    Cpu->VMCS_PA = MmGetPhysicalAddress(Cpu->OriginalVmcs);
-
-    set_in_cr4 (X86_CR4_VMXE);
-    *(ULONG64 *) Cpu->OriginaVmxonR = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); //set up vmcs_revision_id
-    *(ULONG64 *) Cpu->OriginalVmcs  = (__readmsr(MSR_IA32_VMX_BASIC) & 0xffffffff); 
-
-    if (__vmx_on (&Cpu->OriginalVmxonRPA))
-    {
-        KdPrint (("VmxOn Failed!\n"));
-        return STATUS_UNSUCCESSFUL;
-    }
-
-    //============================= 配置VMCS ================================
-    if ( VmxSetupVMCS (Cpu, GuestRip, GuestRsp) )
-    {
-        KdPrint (("VmxSetupVMCS() failed!"));
-        __vmx_off ();
-        clear_in_cr4 (X86_CR4_VMXE);
-        return STATUS_UNSUCCESSFUL;
-    }
-
-  return STATUS_SUCCESS;
-}
-
-static VOID VmxGenerateTrampolineToGuest (
-  PCPU Cpu,
+VOID VmxGenerateTrampolineToGuest (
   PGUEST_REGS GuestRegs,
   PUCHAR Trampoline
 )
@@ -472,7 +396,6 @@ static VOID VmxGenerateTrampolineToGuest (
 }
 
 NTSTATUS VmxShutdown (
-  PCPU Cpu,
   PGUEST_REGS GuestRegs
 )
 {
@@ -481,7 +404,7 @@ NTSTATUS VmxShutdown (
   InterlockedDecrement (&g_uSubvertedCPUs);
 
   // The code should be updated to build an approproate trampoline to exit to any guest mode.
-  VmxGenerateTrampolineToGuest (Cpu, GuestRegs, Trampoline);
+  VmxGenerateTrampolineToGuest (GuestRegs, Trampoline);
 
   __vmx_off ();
   clear_in_cr4 (X86_CR4_VMXE);

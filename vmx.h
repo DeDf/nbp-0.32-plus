@@ -139,15 +139,13 @@ VOID  VmxDumpVmcs ();
 
 BOOLEAN  VmxIsImplemented ();
 
-NTSTATUS
-VmxInitialize (
-  PCPU Cpu,
-  PVOID GuestRip,
-  PVOID GuestRsp
-);
+NTSTATUS VmxSetupVMCS (
+                       ULONG_PTR VMM_Stack,
+                       PVOID GuestRip,
+                       PVOID GuestRsp
+                       );
 
 NTSTATUS  VmxShutdown (
-  PCPU Cpu,
   PGUEST_REGS GuestRegs
 );
 
