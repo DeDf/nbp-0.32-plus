@@ -135,15 +135,9 @@ VmExitHandler (
 
         switch (ecx)
         {
-        case MSR_IA32_SYSENTER_CS:
-            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_CS);
-            break;
-
-        case MSR_IA32_SYSENTER_ESP:
-            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_ESP);
-            break;
-        case MSR_IA32_SYSENTER_EIP:
-            MsrValue.QuadPart = VmxRead (GUEST_SYSENTER_EIP);
+        case MSR_LSTAR:
+            KdPrint(("readmsr MSR_LSTAR\n"));
+            MsrValue.QuadPart = __readmsr (MSR_LSTAR);
             break;
         case MSR_GS_BASE:
             MsrValue.QuadPart = VmxRead (GUEST_GS_BASE);
@@ -168,14 +162,9 @@ VmExitHandler (
 
         switch (ecx)
         {
-        case MSR_IA32_SYSENTER_CS:
-            __vmx_vmwrite (GUEST_SYSENTER_CS, MsrValue.QuadPart);
-            break;
-        case MSR_IA32_SYSENTER_ESP:
-            __vmx_vmwrite (GUEST_SYSENTER_ESP, MsrValue.QuadPart);
-            break;
-        case MSR_IA32_SYSENTER_EIP:
-            __vmx_vmwrite (GUEST_SYSENTER_EIP, MsrValue.QuadPart);
+        case MSR_LSTAR:
+            KdPrint(("writemsr MSR_LSTAR\n"));
+            __vmx_vmwrite (MSR_LSTAR, MsrValue.QuadPart);
             break;
         case MSR_GS_BASE:
             __vmx_vmwrite (GUEST_GS_BASE, MsrValue.QuadPart);
@@ -286,15 +275,6 @@ NTSTATUS VmxSetupVMCS (
   //
   __vmx_vmwrite (HOST_GDTR_BASE, (ULONG64) GdtBase);
   __vmx_vmwrite (HOST_IDTR_BASE, (ULONG64) GetIdtBase ());
-
-  // SetSysCall()
-  __vmx_vmwrite (GUEST_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  __vmx_vmwrite (GUEST_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (GUEST_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
-  //
-  __vmx_vmwrite (HOST_IA32_SYSENTER_CS,  __readmsr (MSR_IA32_SYSENTER_CS));
-  __vmx_vmwrite (HOST_IA32_SYSENTER_ESP, __readmsr (MSR_IA32_SYSENTER_ESP));
-  __vmx_vmwrite (HOST_IA32_SYSENTER_EIP, __readmsr (MSR_IA32_SYSENTER_EIP));
 
   // SetSegSelectors()
   VmxFillGuestSelectorData (GdtBase, ES, RegGetEs ());

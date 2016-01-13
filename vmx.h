@@ -112,6 +112,8 @@ enum SEGREGS
 #define MSR_IA32_SYSENTER_EIP		0x176
 #define MSR_IA32_DEBUGCTL			0x1d9
 
+#define MSR_LSTAR           0xC0000082
+
 #define MSR_FS_BASE         0xc0000100        /* 64bit FS base */
 #define MSR_GS_BASE         0xc0000101        /* 64bit GS base */
 #define MSR_SHADOW_GS_BASE  0xc0000102        /* SwapGS GS shadow */ 
