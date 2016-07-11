@@ -55,8 +55,9 @@ VOID VmxDumpVmcs ()
   KdPrint (("GUEST_IA32_DEBUGCTL 0x%X: 0x%llx\n",      GUEST_IA32_DEBUGCTL,      VmxRead (GUEST_IA32_DEBUGCTL)));
   KdPrint (("GUEST_IA32_DEBUGCTL_HIGH 0x%X: 0x%llx\n", GUEST_IA32_DEBUGCTL_HIGH, VmxRead (GUEST_IA32_DEBUGCTL_HIGH)));
 
-  KdPrint (("\n/*****32-bit Control Fields*****/\n"));
-  KdPrint (("PIN_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", PIN_BASED_VM_EXEC_CONTROL, VmxRead (PIN_BASED_VM_EXEC_CONTROL)));
+  KdPrint (("\n\n\n/*****32-bit Control Fields*****/\n"));
+  addr = PIN_BASED_VM_EXEC_CONTROL;
+  KdPrint (("PIN_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = CPU_BASED_VM_EXEC_CONTROL;
   KdPrint (("CPU_BASED_VM_EXEC_CONTROL 0x%X: 0x%llx\n", addr, VmxRead (addr)));
   addr = EXCEPTION_BITMAP;

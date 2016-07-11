@@ -1,5 +1,5 @@
 TARGETNAME=newbp
-TARGETPATH=obj
+TARGETPATH=.
 TARGETTYPE=DRIVER
 
 SOURCES=\
@@ -13,4 +13,3 @@ AMD64_SOURCES=\
     vmx-asm.asm \
     common-asm.asm \
     regs.asm
-

@@ -29,6 +29,53 @@ BOOLEAN VmxIsImplemented ()
     return (ecx & (1<<5));
 }
 
+BOOLEAN
+DispatchCrAccess (PGUEST_REGS GuestRegs)
+{
+    ULONG32 exit_qualification = (ULONG32) VmxRead (EXIT_QUALIFICATION);
+    ULONG32 gp = (exit_qualification & CONTROL_REG_ACCESS_REG) >> 8;
+    ULONG32 cr =  exit_qualification & CONTROL_REG_ACCESS_NUM;
+
+    switch (exit_qualification & CONTROL_REG_ACCESS_TYPE)
+    {
+    case TYPE_MOV_TO_CR:
+        if (cr == 0)
+        {
+            __vmx_vmwrite (CR0_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)));
+            return FALSE;
+        }
+
+        if (cr == 3)
+        {
+            __vmx_vmwrite (GUEST_CR3, *(((PULONG64) GuestRegs) + gp));
+            return TRUE;
+        }
+
+        if (cr == 4)
+        {
+            //Nbp need enabele VMXE. so guest try to clear cr4_vmxe, it would be mask.
+            __vmx_vmwrite (CR4_READ_SHADOW, (*(((PULONG64) GuestRegs) + gp)) & ~X86_CR4_VMXE);
+            __vmx_vmwrite (GUEST_CR4,       (*(((PULONG64) GuestRegs) + gp)) | X86_CR4_VMXE);
+
+            return FALSE;
+        }
+        break;
+
+    case TYPE_MOV_FROM_CR:
+        if (cr == 3)
+        {
+            __vmx_vmread(GUEST_CR3, (PULONG64) GuestRegs + gp);
+        }
+        break;
+    case TYPE_CLTS:
+        break;
+    case TYPE_LMSW:
+        break;
+    }
+
+    return TRUE;
+}
+
 VOID
 VmExitHandler (
   PGUEST_REGS GuestRegs
@@ -37,19 +84,15 @@ VmExitHandler (
     ULONG64 ExitReason;
     ULONG_PTR GuestEIP;
     ULONG_PTR inst_len;
-    BOOLEAN WillBeAlsoHandledByGuestHv = FALSE;
 
     if (!GuestRegs)
         return;
 
     __vmx_vmread(VM_EXIT_REASON, &ExitReason);
-    //
     __vmx_vmread(GUEST_RIP, &GuestEIP);
     __vmx_vmread(VM_EXIT_INSTRUCTION_LEN, &inst_len);
 
-    //KdPrint (("VmExitHandler(): ExitReason %x\n", ExitReason));
-
-    if (ExitReason == EXIT_REASON_CPUID)
+    if (ExitReason == EXIT_REASON_CPUID)  // done!
     {
         ULONG32 fn, eax, ebx, ecx, edx;
 
@@ -70,11 +113,59 @@ VmExitHandler (
             GuestRegs->rdx = edx;
         }
     }
-    else if (ExitReason == EXIT_REASON_INVD)
+    else if (ExitReason == EXIT_REASON_MSR_READ)  // done!
+    {
+        LARGE_INTEGER MsrValue;
+        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
+
+        switch (ecx)
+        {
+        case MSR_LSTAR:
+            KdPrint(("readmsr MSR_LSTAR\n"));
+            MsrValue.QuadPart = __readmsr (MSR_LSTAR);
+            break;
+        case MSR_GS_BASE:
+            MsrValue.QuadPart = VmxRead (GUEST_GS_BASE);
+            break;
+        case MSR_FS_BASE:
+            MsrValue.QuadPart = VmxRead (GUEST_FS_BASE);
+            break;
+        default:
+            MsrValue.QuadPart = __readmsr (ecx);
+        }
+
+        GuestRegs->rax = MsrValue.LowPart;
+        GuestRegs->rdx = MsrValue.HighPart;
+    }
+    else if (ExitReason == EXIT_REASON_MSR_WRITE)  // done!
+    {
+        LARGE_INTEGER MsrValue;
+        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
+
+        MsrValue.LowPart  = (ULONG32) GuestRegs->rax;
+        MsrValue.HighPart = (ULONG32) GuestRegs->rdx;
+
+        switch (ecx)
+        {
+        case MSR_LSTAR:
+            KdPrint(("writemsr MSR_LSTAR\n"));
+            __vmx_vmwrite (MSR_LSTAR, MsrValue.QuadPart);
+            break;
+        case MSR_GS_BASE:
+            __vmx_vmwrite (GUEST_GS_BASE, MsrValue.QuadPart);
+            break;
+        case MSR_FS_BASE:
+            __vmx_vmwrite (GUEST_FS_BASE, MsrValue.QuadPart);
+            break;
+        default:
+            __writemsr (ecx, MsrValue.QuadPart);
+        }
+    }
+    else if (ExitReason == EXIT_REASON_INVD)  // done!
     {
 
     }
-    else if (ExitReason == EXIT_REASON_VMCALL)
+    else if (ExitReason == EXIT_REASON_VMCALL)  // done!
     {
         ULONG32 HypercallNumber = (ULONG32) (GuestRegs->rcx & 0xffff);
 
@@ -100,85 +191,24 @@ VmExitHandler (
         GuestRegs->rcx = NBP_MAGIC;
         GuestRegs->rdx = 0;
     }
-    else if (ExitReason >= EXIT_REASON_VMCLEAR && ExitReason <= EXIT_REASON_VMXON)
+    else if (ExitReason >= EXIT_REASON_VMCLEAR && ExitReason <= EXIT_REASON_VMXON)  // done!
     {
         __vmx_vmwrite(GUEST_RFLAGS, VmxRead (GUEST_RFLAGS) & (~0x8d5) | 0x1 /* VMFailInvalid */ );
     }
     else if (ExitReason == EXIT_REASON_CR_ACCESS)
     {
-        ULONG32 exit_qualification = (ULONG32) VmxRead (EXIT_QUALIFICATION);
-        ULONG32 gp = (exit_qualification & CONTROL_REG_ACCESS_REG) >> 8;
-        ULONG32 cr =  exit_qualification & CONTROL_REG_ACCESS_NUM;
-
-        switch (exit_qualification & CONTROL_REG_ACCESS_TYPE)
+        if (DispatchCrAccess(GuestRegs))
         {
-        case TYPE_MOV_TO_CR:
-            if (cr == 3)
-                __vmx_vmwrite (GUEST_CR3, *((PULONG64) GuestRegs + gp));
-            break;
-
-        case TYPE_MOV_FROM_CR:
-            if (cr == 3)
-                __vmx_vmread(GUEST_CR3, (PULONG64) GuestRegs + gp);
-            break;
-
-            //   case TYPE_CLTS:
-            //     break;
-            //   case TYPE_LMSW:
-            //     break;
+            __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
+            return;
         }
-    }
-    else if (ExitReason == EXIT_REASON_MSR_READ)
-    {
-        LARGE_INTEGER MsrValue;
-        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
-
-        switch (ecx)
-        {
-        case MSR_LSTAR:
-            KdPrint(("readmsr MSR_LSTAR\n"));
-            MsrValue.QuadPart = __readmsr (MSR_LSTAR);
-            break;
-        case MSR_GS_BASE:
-            MsrValue.QuadPart = VmxRead (GUEST_GS_BASE);
-            break;
-        case MSR_FS_BASE:
-            MsrValue.QuadPart = VmxRead (GUEST_FS_BASE);
-            break;
-        default:
-            MsrValue.QuadPart = __readmsr (ecx);
-        }
-
-        GuestRegs->rax = MsrValue.LowPart;
-        GuestRegs->rdx = MsrValue.HighPart;
-    }
-    else if (ExitReason == EXIT_REASON_MSR_WRITE)
-    {
-        LARGE_INTEGER MsrValue;
-        ULONG32 ecx = (ULONG32) GuestRegs->rcx;
-
-        MsrValue.LowPart  = (ULONG32) GuestRegs->rax;
-        MsrValue.HighPart = (ULONG32) GuestRegs->rdx;
-
-        switch (ecx)
-        {
-        case MSR_LSTAR:
-            KdPrint(("writemsr MSR_LSTAR\n"));
-            __vmx_vmwrite (MSR_LSTAR, MsrValue.QuadPart);
-            break;
-        case MSR_GS_BASE:
-            __vmx_vmwrite (GUEST_GS_BASE, MsrValue.QuadPart);
-            break;
-        case MSR_FS_BASE:
-            __vmx_vmwrite (GUEST_FS_BASE, MsrValue.QuadPart);
-            break;
-        default:
-            __writemsr (ecx, MsrValue.QuadPart);
-        }
+        else
+            return;
     }
     else
     {
         KdPrint (("VmExitHandler(): failed for exitcode 0x%llX\n", ExitReason));
+        //__debugbreak();
     }
 
     __vmx_vmwrite(GUEST_RIP, GuestEIP + inst_len);
@@ -254,9 +284,11 @@ NTSTATUS VmxSetupVMCS (
 ////////////////////////////////////////////////////////////////////////////////////////////////
 
   // SetCRx()
-  __vmx_vmwrite (CR0_GUEST_HOST_MASK, 0);            // disable vmexit 0f mov to cr0 all
+  __vmx_vmwrite (CR0_GUEST_HOST_MASK, X86_CR0_PG);   // disable vmexit 0f mov to cr0 expect for X86_CR0_PG
   __vmx_vmwrite (CR4_GUEST_HOST_MASK, X86_CR4_VMXE); // disable vmexit 0f mov to cr4 expect for X86_CR4_VMXE
+  //__vmx_vmwrite (CR0_READ_SHADOW, __readcr0());
   __vmx_vmwrite (CR4_READ_SHADOW, __readcr4() & ~X86_CR4_VMXE);  // Cr4寄存器SHADOW里去掉X86_CR4_VMXE
+
   //
   __vmx_vmwrite (GUEST_CR0, __readcr0 ());
   __vmx_vmwrite (GUEST_CR3, __readcr3 ());

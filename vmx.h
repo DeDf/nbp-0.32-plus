@@ -87,10 +87,8 @@ enum SEGREGS
 #define TYPE_CLTS               (2 << 4)
 #define TYPE_LMSW               (3 << 4)
 
-/*
- * Intel CPU features in CR4
- */
-#define X86_CR4_VMXE		0x2000  /* enable VMX */
+#define X86_CR0_PG              0x80000000      /* Paging     */
+#define X86_CR4_VMXE		    0x2000          /* enable VMX */
 
 /*
  * Intel CPU  MSR

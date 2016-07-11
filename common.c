@@ -29,8 +29,10 @@ NTSTATUS  CmInitializeSegmentSelector (
   SegmentSelector->attributes = SegDesc->AttributesLow | SegDesc->AttributesHigh << 8;
 
   if (!(SegDesc->AttributesLow & LA_STANDARD)) {
+    ULONG64 tmp;
     // this is a TSS or callgate etc, save the base high part
-    SegmentSelector->base |= (*(PULONG64) ((PUCHAR) SegDesc + 8)) << 32;
+    tmp = (*(PULONG64) ((PUCHAR) SegDesc + 8));
+    SegmentSelector->base = (SegmentSelector->base & 0xffffffff) | (tmp << 32);
   }
 
 #define IS_GRANULARITY_4KB  (1 << 0xB)
